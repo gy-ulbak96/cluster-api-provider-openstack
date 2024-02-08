@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"reflect"
 	"time"
+	"log"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -324,6 +325,7 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 		return ctrl.Result{}, nil
 	}
 	userData, err := r.getBootstrapData(ctx, machine, openStackMachine)
+	log.Printf("It is a test")
 	if err != nil {
 		return ctrl.Result{}, err
 	}

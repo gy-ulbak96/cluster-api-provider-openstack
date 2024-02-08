@@ -1,0 +1,5 @@
+providers:
+  # add a custom provider
+  - name: 'test-release"
+    url: "https://github.com/gy-ulbak96/cluster-api-provider-openstack/releases/download/test2/infrastructure-test.yaml"
+    type: "InfrastructureProvider"

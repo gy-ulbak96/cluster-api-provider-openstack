@@ -63,7 +63,8 @@ export PATH
 
 # Release variables
 
-STAGING_REGISTRY := gcr.io/k8s-staging-capi-openstack
+#STAGING_REGISTRY := gcr.io/k8s-staging-capi-openstack
+STAGING_REGISTRY := registry.arc.hcloud.io/bgrtest
 STAGING_BUCKET ?= artifacts.k8s-staging-capi-openstack.appspot.com
 BUCKET ?= $(STAGING_BUCKET)
 PROD_REGISTRY ?= registry.k8s.io/capi-openstack
@@ -81,7 +82,8 @@ ALL_ARCH ?= amd64 arm arm64 ppc64le s390x
 IMAGE_NAME ?= capi-openstack-controller
 CONTROLLER_IMG ?= $(REGISTRY)/$(IMAGE_NAME)
 CONTROLLER_IMG_TAG ?= $(CONTROLLER_IMG)-$(ARCH):$(TAG)
-CONTROLLER_ORIGINAL_IMG := gcr.io/k8s-staging-capi-openstack/capi-openstack-controller
+#CONTROLLER_ORIGINAL_IMG := gcr.io/k8s-staging-capi-openstack/capi-openstack-controller
+CONTROLLER_ORIGINAL_IMG := registry.arc.hcloud.io/bgrtest/capo:capo
 CONTROLLER_NAME := capo-controller-manager
 MANIFEST_FILE := infrastructure-components
 CONFIG_DIR := config
@@ -183,7 +185,8 @@ test-e2e: e2e-prerequisites ## Run e2e tests
 			-data-folder="$(E2E_DATA_DIR)" $(E2E_ARGS)
 
 .PHONY: e2e-image
-e2e-image: CONTROLLER_IMG_TAG = "gcr.io/k8s-staging-capi-openstack/capi-openstack-controller:e2e"
+#e2e-image: CONTROLLER_IMG_TAG = "gcr.io/k8s-staging-capi-openstack:e2e"
+e2e-image: CONTROLLER_IMG_TAG = "registry.arc.hcloud.io/bgrtest/capo:capo"
 e2e-image: docker-build
 
 # Pull all the images references in test/e2e/data/e2e_conf.yaml
@@ -286,7 +289,7 @@ generate-manifests: $(CONTROLLER_GEN) ## Generate manifests e.g. CRD, RBAC etc.
 
 .PHONY: docker-build
 docker-build: ## Build the docker image for controller-manager
-	docker build -f Dockerfile --build-arg goproxy=$(GOPROXY) --build-arg ARCH=$(ARCH) --build-arg LDFLAGS="$(LDFLAGS)" . -t $(CONTROLLER_IMG_TAG)
+	docker build -f Dockerfile --build-arg goproxy=$(GOPROXY) --build-arg ARCH=$(ARCH) --build-arg LDFLAGS="$(LDFLAGS)" . -t $(CONTROLLER_IMG_TAG) --no-cache
 
 .PHONY: docker-push
 docker-push: ## Push the docker image
