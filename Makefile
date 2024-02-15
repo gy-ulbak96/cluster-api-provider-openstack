@@ -74,7 +74,7 @@ PULL_BASE_REF ?= $(RELEASE_TAG) # PULL_BASE_REF will be provided by Prow
 RELEASE_ALIAS_TAG ?= $(PULL_BASE_REF)
 RELEASE_DIR := out
 
-TAG ?= dev
+TAG ?= 0.1
 ARCH ?= amd64
 ALL_ARCH ?= amd64 arm arm64 ppc64le s390x
 

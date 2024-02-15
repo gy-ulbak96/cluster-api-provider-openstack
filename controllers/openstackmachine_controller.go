@@ -24,6 +24,10 @@ import (
 	"reflect"
 	"time"
 	"log"
+	//
+	"gopkg.in/yaml.v2"
+
+	//
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -325,7 +329,38 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 		return ctrl.Result{}, nil
 	}
 	userData, err := r.getBootstrapData(ctx, machine, openStackMachine)
-	log.Printf("It is a test")
+
+	log.Printf("test confirm : %v,%v,%T",userData,string(userData),userData)
+
+	//add cloud-config
+	key := "runcmd"
+
+	originUserData, err := base64.StdEncoding.DecodeString(userData)
+	log.Printf("%v,%T",originUserData,originUserData)
+	customData := make(map[interface{}]interface{})
+	if err := yaml.Unmarshal(originUserData, &customData); err != nil {
+		log.Printf("%v",err)
+	}
+
+	var tempData []string
+	userCmd := reflect.ValueOf(customData[key])
+	
+	tempData = append(tempData, "sudo sed -i 's/$CUSTOM_CONTROL_PLANE_VIP/172.21.4.66/g' /etc/keepalived/keepalived.conf")
+	tempData = append(tempData, "sudo systemctl restart keepalived")
+	for i := 0; i < userCmd.Len(); i++ {
+		tempData = append(tempData, userCmd.Index(i).Interface().(string))
+	}
+
+	customData[key]= tempData
+	log.Printf("middle result,%v", customData)
+	userDataContent, err := yaml.Marshal(customData)
+	newUserData := append([]byte("## template: jinja\n#cloud-config\n"), userDataContent...)
+
+	newUserDataString := base64.StdEncoding.EncodeToString(newUserData)
+	log.Printf("final Data %v",newUserDataString)
+	log.Printf("difference between %v,%v",userData,newUserDataString)
+	//
+
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -343,7 +378,8 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 		return ctrl.Result{}, err
 	}
 
-	instanceStatus, err := r.getOrCreate(scope.Logger(), cluster, openStackCluster, machine, openStackMachine, computeService, userData)
+	instanceStatus, err := r.getOrCreate(scope.Logger(), cluster, openStackCluster, machine, openStackMachine, computeService, newUserDataString)
+	// instanceStatus, err := r.getOrCreate(scope.Logger(), cluster, openStackCluster, machine, openStackMachine, computeService, userData)
 	if err != nil || instanceStatus == nil {
 		// Conditions set in getOrCreate
 		return ctrl.Result{}, err

@@ -13415,7 +13415,7 @@ spec:
         command:
         - /manager
         # image: gcr.io/k8s-staging-capi-openstack/capi-openstack-controller:dev
-        image: registry.arc.hcloud.io/bgrtest/capi-openstack-controller-amd64:dev
+        image: registry.arc.hcloud.io/bgrtest/capi-openstack-controller-amd64:0.1
         imagePullPolicy: Always
         livenessProbe:
           httpGet:
