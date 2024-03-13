@@ -345,7 +345,7 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 	var tempData []string
 	userCmd := reflect.ValueOf(customData[key])
 	
-	tempData = append(tempData, "sudo sed -i 's/$CUSTOM_CONTROL_PLANE_VIP/172.21.4.66/g' /etc/keepalived/keepalived.conf")
+	tempData = append(tempData, "sudo sed -i 's/$CUSTOM_CONTROL_PLANE_VIP/172.21.4.253/g' /etc/keepalived/keepalived.conf")
 	tempData = append(tempData, "sudo systemctl restart keepalived")
 	for i := 0; i < userCmd.Len(); i++ {
 		tempData = append(tempData, userCmd.Index(i).Interface().(string))

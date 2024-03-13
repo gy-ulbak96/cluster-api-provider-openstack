@@ -3,3 +3,10 @@ providers:
   - name: "custom-openstack"
     url: "https://github.com/gy-ulbak96/cluster-api-provider-openstack/releases/v0.9.0/infrastructure-test.yaml"
     type: "InfrastructureProvider"
+  - name: "rke2"
+    url: "https://github.com/rancher-sandbox/cluster-api-provider-rke2/releases/v0.1.1/bootstrap-components.yaml"
+    type: "BootstrapProvider"
+  - name: "rke2"
+    url: "https://github.com/rancher-sandbox/cluster-api-provider-rke2/releases/v0.1.1/control-plane-components.yaml"
+    type: "ControlPlaneProvider"
+  
