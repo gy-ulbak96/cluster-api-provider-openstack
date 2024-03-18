@@ -63,7 +63,8 @@ export PATH
 
 # Release variables
 
-STAGING_REGISTRY := gcr.io/k8s-staging-capi-openstack
+# STAGING_REGISTRY := gcr.io/k8s-staging-capi-openstack
+STAGING_REGISTRY := registry.arc.hcloud.io/bgrtest
 STAGING_BUCKET ?= artifacts.k8s-staging-capi-openstack.appspot.com
 BUCKET ?= $(STAGING_BUCKET)
 PROD_REGISTRY ?= registry.k8s.io/capi-openstack
@@ -262,6 +263,7 @@ generate-go: $(MOCKGEN)
 		--input-dirs=./api/v1alpha6 \
 		--input-dirs=./api/v1alpha7 \
 		--input-dirs=./api/v1alpha8 \
+		--input-dirs=./api/v1alpha9 \
 		--output-file-base=zz_generated.conversion \
 		--go-header-file=./hack/boilerplate/boilerplate.generatego.txt
 	go generate ./...

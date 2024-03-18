@@ -53,6 +53,11 @@ import (
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/loadbalancer"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/networking"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
+
+	//test
+	"sigs.k8s.io/cluster-api/util/collections"
+    "log"
+	//test
 )
 
 // OpenStackMachineReconciler reconciles a OpenStackMachine object.
@@ -323,6 +328,13 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 		conditions.MarkFalse(openStackMachine, infrav1.InstanceReadyCondition, infrav1.WaitingForBootstrapDataReason, clusterv1.ConditionSeverityInfo, "")
 		return ctrl.Result{}, nil
 	}
+
+	//test start
+	// is ready : https://github.com/kubernetes-sigs/cluster-api/blob/v1.6.3/util/collections/machine_filters.go
+	log.Printf("testtesttest %v,%v",collections.ControlPlaneMachines("custom-capo"))
+
+	//test end
+
 	userData, err := r.getBootstrapData(ctx, machine, openStackMachine)
 	if err != nil {
 		return ctrl.Result{}, err
