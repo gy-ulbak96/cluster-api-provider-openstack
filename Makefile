@@ -63,7 +63,8 @@ export PATH
 
 # Release variables
 
-STAGING_REGISTRY := gcr.io/k8s-staging-capi-openstack
+# STAGING_REGISTRY := gcr.io/k8s-staging-capi-openstack
+STAGING_REGISTRY := registry.arc.hcloud.io/bgrtest
 STAGING_BUCKET ?= artifacts.k8s-staging-capi-openstack.appspot.com
 BUCKET ?= $(STAGING_BUCKET)
 PROD_REGISTRY ?= registry.k8s.io/capi-openstack
