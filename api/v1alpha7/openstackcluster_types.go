@@ -227,6 +227,9 @@ type OpenStackClusterStatus struct {
 	// and/or logged in the controller's output.
 	// +optional
 	FailureMessage *string `json:"failureMessage,omitempty"`
+	// AvailableServerIPs is a list of the Control Plane IP adds that can be used to register further nodes.
+	// +optional
+	AvailableServerIPs []string `json:"availableServerIPs,omitempty"`
 }
 
 // +kubebuilder:object:root=true

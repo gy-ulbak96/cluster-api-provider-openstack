@@ -4464,6 +4464,12 @@ spec:
                 - ip
                 - name
                 type: object
+              availableServerIPs:
+                description: AvailableServerIPs is a list of the Control Plane IP
+                  adds that can be used to register further nodes.
+                items:
+                  type: string
+                type: array
               bastion:
                 properties:
                   floatingIP:
@@ -5577,6 +5583,12 @@ spec:
                 - ip
                 - name
                 type: object
+              availableServerIPs:
+                description: AvailableServerIPs is a list of the Control Plane IP
+                  adds that can be used to register further nodes.
+                items:
+                  type: string
+                type: array
               bastion:
                 properties:
                   floatingIP:
