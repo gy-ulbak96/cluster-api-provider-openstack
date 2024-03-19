@@ -55,8 +55,9 @@ import (
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
 
 	//test
-	"sigs.k8s.io/cluster-api/util/collections"
-	"log"
+	// "sigs.k8s.io/cluster-api/util/collections"
+	// "log"
+	// giterror "github.com/pkg/errors"
 	//test
 )
 
@@ -94,7 +95,7 @@ func (r *OpenStackMachineReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, err
 	}
 
-	log = log.WithValues("openStackMachine", openStackMachine.Name)
+	log = log.WithValues("openStackMachine testtesttesttest", openStackMachine.Name)
 
 	// Fetch the Machine.
 	machine, err := util.GetOwnerMachine(ctx, r.Client, openStackMachine.ObjectMeta)
@@ -106,7 +107,7 @@ func (r *OpenStackMachineReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	log = log.WithValues("machine", machine.Name)
+	log = log.WithValues("machine testtesttesttest", machine.Name)
 
 	// Fetch the Cluster.
 	cluster, err := util.GetClusterFromMetadata(ctx, r.Client, machine.ObjectMeta)
@@ -115,7 +116,7 @@ func (r *OpenStackMachineReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	log = log.WithValues("cluster", cluster.Name)
+	log = log.WithValues("cluster testtesttesttest", cluster.Name)
 
 	if annotations.IsPaused(cluster, openStackMachine) {
 		log.Info("OpenStackMachine or linked Cluster is marked as paused. Won't reconcile")
@@ -131,7 +132,7 @@ func (r *OpenStackMachineReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	log = log.WithValues("openStackCluster", infraCluster.Name)
+	log = log.WithValues("openStackCluster testtesttesttest", infraCluster.Name)
 
 	// Initialize the patch helper
 	patchHelper, err := patch.NewHelper(openStackMachine, r.Client)
@@ -329,10 +330,24 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 		return ctrl.Result{}, nil
 	}
 
-	//test start
-	// is ready : https://github.com/kubernetes-sigs/cluster-api/blob/v1.6.3/util/collections/machine_filters.go
-	log.Printf("testtesttest %v,%v",collections.ControlPlaneMachines("custom-capo"))
-	//test end
+	// //test start
+	// // is ready : https://github.com/kubernetes-sigs/cluster-api/blob/v1.6.3/util/collections/machine_filters.go
+	// log.Printf("testtesttest %v,%v",collections.ControlPlaneMachines(cluster.Name))
+	// ownedMachines, err := r.managementCluster.GetMachinesForCluster(
+	// 	ctx,
+	// 	util.ObjectKey(cluster),
+	// 	collections.OwnedMachines(openStackMachine))
+	// if err != nil {
+	// 	return giterror.Wrap(err, "failed to get list of owned machines")
+	// }
+
+	// readyMachines := ownedMachines.Filter(collections.IsReady())
+	// for _, readyMachine := range readyMachines {
+	// 	log.Printf("Ready Machine : %v", readyMachine.Name)
+	// }
+
+
+	// //test end
 
 	userData, err := r.getBootstrapData(ctx, machine, openStackMachine)
 	if err != nil {
@@ -363,7 +378,13 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 	openStackMachine.Spec.ProviderID = pointer.String(fmt.Sprintf("openstack:///%s", instanceStatus.ID()))
 	openStackMachine.Spec.InstanceID = pointer.String(instanceStatus.ID())
 
+	///testtesttest
+	log.Printf("looooookat the IP %v",pointer.String(instanceStatus.Ports))
+
+	///testtesttest
+
 	state := instanceStatus.State()
+	log.Printf("looooooooooooooook")
 	openStackMachine.Status.InstanceState = &state
 
 	instanceNS, err := instanceStatus.NetworkStatus()
