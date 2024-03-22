@@ -53,6 +53,11 @@ import (
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/loadbalancer"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/networking"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
+
+	//testtesttest
+	"log"
+	"encoding/json"
+	//testtesttest
 )
 
 // OpenStackMachineReconciler reconciles a OpenStackMachine object.
@@ -370,6 +375,27 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 		Address: instanceStatus.Name(),
 	})
 	openStackMachine.Status.Addresses = addresses
+
+	//testtesttesttest
+	for _, adr := range addresses {
+		adrbyte, err := json.Marshal(adr)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("address marshal error occured: %w", err)
+		}
+
+		adrmap := make(map[string]string)
+		if err := json.Unmarshal(adrbyte, &adrmap); err != nil {
+			return ctrl.Result{}, fmt.Errorf("address unmarshal error occured: %w", err)
+		}	
+
+		if adrmap["type"] == "InternalIP"{
+			log.Printf("loook at the IP %v, %T", adrmap["address"], adrmap["address"])
+			openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,adrmap["address"])
+			log.Printf("what is the openstackcluster.status %v",openStackCluster.Status.AvailableServerIPs)
+			reconcileNormal(scope, cluster, openStackCluster)
+		}
+	}
+	//testtesttesttest
 
 	switch instanceStatus.State() {
 	case infrav1.InstanceStateActive:

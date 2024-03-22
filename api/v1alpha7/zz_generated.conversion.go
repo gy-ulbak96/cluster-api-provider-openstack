@@ -975,6 +975,7 @@ func autoConvert_v1alpha7_OpenStackClusterStatus_To_v1alpha8_OpenStackClusterSta
 	}
 	out.FailureReason = (*errors.ClusterStatusError)(unsafe.Pointer(in.FailureReason))
 	out.FailureMessage = (*string)(unsafe.Pointer(in.FailureMessage))
+	out.AvailableServerIPs = *(*[]string)(unsafe.Pointer(&in.AvailableServerIPs))
 	return nil
 }
 
@@ -1004,6 +1005,7 @@ func autoConvert_v1alpha8_OpenStackClusterStatus_To_v1alpha7_OpenStackClusterSta
 	}
 	out.FailureReason = (*errors.ClusterStatusError)(unsafe.Pointer(in.FailureReason))
 	out.FailureMessage = (*string)(unsafe.Pointer(in.FailureMessage))
+	out.AvailableServerIPs = *(*[]string)(unsafe.Pointer(&in.AvailableServerIPs))
 	return nil
 }
 

@@ -51,6 +51,10 @@ import (
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/networking"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
 	utils "sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/controllers"
+
+	//testtesttest
+	"log"
+	//testtesttest
 )
 
 const (
@@ -324,6 +328,11 @@ func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackClu
 	openStackCluster.Status.Ready = true
 	openStackCluster.Status.FailureMessage = nil
 	openStackCluster.Status.FailureReason = nil
+	if openStackCluster.Status.AvailableServerIPs == nil {
+		log.Printf("########nil openstackcluster available serverip %v", openStackCluster.Status.AvailableServerIPs)
+		openStackCluster.Status.FailureReason = nil
+	}
+	log.Printf("########not nil openstackcluster available serverip %v", openStackCluster.Status.AvailableServerIPs)
 	scope.Logger().Info("Reconciled Cluster created successfully")
 	return reconcile.Result{}, nil
 }
