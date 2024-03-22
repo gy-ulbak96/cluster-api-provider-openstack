@@ -51,6 +51,9 @@ import (
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/networking"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
 	utils "sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/controllers"
+
+	//testtesttest
+	"log"
 )
 
 const (
@@ -306,6 +309,13 @@ func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackClu
 		return ctrl.Result{}, err
 	}
 
+	///testtesttesttest
+	if openStackCluster.Status.AvailableServerIPs != nil {
+		log.Printf("######NOT NILLLLLL %v", openStackCluster.Status.AvailableServerIPs)
+		// handleAvailableServers(scope, openStackCluster, serverslice)
+	}
+	///testtesttesttest
+
 	// Create a new list in case any AZs have been removed from OpenStack
 	openStackCluster.Status.FailureDomains = make(clusterv1.FailureDomains)
 	for _, az := range availabilityZones {
@@ -324,6 +334,24 @@ func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackClu
 	openStackCluster.Status.Ready = true
 	openStackCluster.Status.FailureMessage = nil
 	openStackCluster.Status.FailureReason = nil
+	if openStackCluster.Status.AvailableServerIPs == nil {
+		log.Printf("######FIRST NILLLLLL %v", openStackCluster.Status.AvailableServerIPs)
+		var s[]string
+		openStackCluster.Status.AvailableServerIPs = s
+	}
+	log.Printf("######HOW ABOUT NOW NILLLLLL %v", openStackCluster.Status.AvailableServerIPs)
+
+	// var flag []string
+	// log.Printf("flag status %v, %T", flag, flag)
+	// flag = openStackCluster.Status.AvailableServerIPs
+	// openStackCluster.Status.AvailableServerIPs = []string{"test"}
+	// log.Printf("what is the openstackcluster in openstack controller %v, %T",openStackCluster.Status.AvailableServerIPs,openStackCluster.Status.AvailableServerIPs)
+	// openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs, flag...)
+	// log.Printf("noooooow what is the openstackcluster in openstack controller %v, %T",openStackCluster.Status.AvailableServerIPs,openStackCluster.Status.AvailableServerIPs)
+
+	//testtesttest
+	// openStackCluster.Status.AvailableServerIPs = []string{"test"}
+	//testtesttest
 	scope.Logger().Info("Reconciled Cluster created successfully")
 	return reconcile.Result{}, nil
 }
@@ -714,3 +742,14 @@ func filterSubnets(networkingService *networking.Service, openStackCluster *infr
 	}
 	return subnets, nil
 }
+
+// func handleAvailableServers(score scope.Scope, openStackCluster *infrav1.OpenStackCluster) {
+// 	// var flag []string
+// 	// flag = openStackCluster.Status.AvailableServerIPs
+// 	// openStackCluster.Status.AvailableServerIPs = []string{"test"}
+// 	log.Printf("what is the openstackcluster in openstack controller %v, %T",openStackCluster.Status.AvailableServerIPs,openStackCluster.Status.AvailableServerIPs)
+// 	openStackCluster.Status.AvailableServerIPs = openStackCluster.Status.AvailableServerIPs
+// 	log.Printf("noooooow what is the openstackcluster in openstack controller %v, %T",openStackCluster.Status.AvailableServerIPs,openStackCluster.Status.AvailableServerIPs)
+// 	scope.Logger().Info("handle Available Servers created successfully")
+// 	return reconcile.Result{}, nil
+// }

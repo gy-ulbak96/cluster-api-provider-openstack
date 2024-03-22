@@ -228,7 +228,6 @@ type OpenStackClusterStatus struct {
 	// +optional
 	FailureMessage *string `json:"failureMessage,omitempty"`
 	// AvailableServerIPs is a list of the Control Plane IP adds that can be used to register further nodes.
-	// +optional
 	AvailableServerIPs []string `json:"availableServerIPs,omitempty"`
 }
 
