@@ -53,7 +53,7 @@ import (
 	utils "sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/controllers"
 
 	//testtesttest
-	"log"
+	// "log"
 	//testtesttest
 )
 
@@ -328,12 +328,15 @@ func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackClu
 	openStackCluster.Status.Ready = true
 	openStackCluster.Status.FailureMessage = nil
 	openStackCluster.Status.FailureReason = nil
-	if openStackCluster.Status.AvailableServerIPs == nil {
-		log.Printf("########nil openstackcluster available serverip %v", openStackCluster.Status.AvailableServerIPs)
-		openStackCluster.Status.FailureReason = nil
-	}
-	log.Printf("########not nil openstackcluster available serverip %v", openStackCluster.Status.AvailableServerIPs)
-	scope.Logger().Info("Reconciled Cluster created successfully")
+	//testtesttest
+	// if openStackCluster.Status.AvailableServerIPs == nil || openStackCluster.Status.AvailableServerIPs[0] == "false" {
+	// 	log.Printf("########nil openstackcluster available serverip %v", openStackCluster.Status.AvailableServerIPs)
+	// 	openStackCluster.Status.AvailableServerIPs = []string{"false"}
+	// }
+	// UpdateAvailableServerStatus(openStackCluster)
+	// log.Printf("########not nil openstackcluster available serverip %v", openStackCluster.Status.AvailableServerIPs)
+	// scope.Logger().Info("Reconciled Cluster created successfully")
+	// //testtesttest
 	return reconcile.Result{}, nil
 }
 

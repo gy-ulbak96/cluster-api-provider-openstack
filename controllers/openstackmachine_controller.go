@@ -75,6 +75,10 @@ const (
 	waitForBuildingInstanceToReconcile        = 10 * time.Second
 )
 
+var (
+	openstackclusterReconciler       *OpenStackClusterReconciler
+)
+
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=openstackmachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=openstackmachines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=machines;machines/status,verbs=get;list;watch
@@ -390,6 +394,9 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 
 		if adrmap["type"] == "InternalIP"{
 			log.Printf("loook at the IP %v, %T", adrmap["address"], adrmap["address"])
+			// if openStackCluster.Status.AvailableServerIPs[0] == "false" {
+			// 	openStackCluster.Status.AvailableServerIPs = nil
+			// }
 			openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,adrmap["address"])
 			log.Printf("what is the openstackcluster.status %v",openStackCluster.Status.AvailableServerIPs)
 			reconcileNormal(scope, cluster, openStackCluster)
