@@ -77,7 +77,9 @@ const (
 
 var (
 	openstackclusterReconciler       *OpenStackClusterReconciler
+	AvailableServerIPs []string
 )
+
 
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=openstackmachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=openstackmachines/status,verbs=get;update;patch
@@ -381,6 +383,7 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 	openStackMachine.Status.Addresses = addresses
 
 	//testtesttesttest
+
 	for _, adr := range addresses {
 		adrbyte, err := json.Marshal(adr)
 		if err != nil {
@@ -397,10 +400,10 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 			// if openStackCluster.Status.AvailableServerIPs[0] == "false" {
 			// 	openStackCluster.Status.AvailableServerIPs = nil
 			// }
-			openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,adrmap["address"])
-			log.Printf("what is the openstackcluster.status %v",openStackCluster.Status.AvailableServerIPs)
-			reconcileNormal(scope, cluster, openStackCluster)
+			log.Printf("BEFORE what is the openstackcluster.status %v",openStackCluster.Status.AvailableServerIPs)
+			AvailableServerIPs = append(AvailableServerIPs,adrmap["address"])			
 		}
+		reconcileNormal(scope, cluster, openStackCluster, AvailableServerIPs)
 	}
 	//testtesttesttest
 

@@ -53,7 +53,8 @@ import (
 	utils "sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/controllers"
 
 	//testtesttest
-	// "log"
+	"log"
+	"slices"
 	//testtesttest
 )
 
@@ -128,8 +129,9 @@ func (r *OpenStackClusterReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return r.reconcileDelete(ctx, scope, cluster, openStackCluster)
 	}
 
+	AvailableServerIPs := openStackCluster.Status.AvailableServerIPs
 	// Handle non-deleted clusters
-	return reconcileNormal(scope, cluster, openStackCluster)
+	return reconcileNormal(scope, cluster, openStackCluster, AvailableServerIPs)
 }
 
 func (r *OpenStackClusterReconciler) reconcileDelete(ctx context.Context, scope scope.Scope, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster) (ctrl.Result, error) {
@@ -158,7 +160,7 @@ func (r *OpenStackClusterReconciler) reconcileDelete(ctx context.Context, scope 
 		return reconcile.Result{}, err
 	}
 
-	clusterName := fmt.Sprintf("%s-%s", cluster.Namespace, cluster.Name)
+	clusterName := fmt.Sprintf("%s-%s", cluster.Namespace, cluster.Name)   
 
 	if openStackCluster.Spec.APIServerLoadBalancer.Enabled {
 		loadBalancerService, err := loadbalancer.NewService(scope)
@@ -281,7 +283,7 @@ func deleteBastion(scope scope.Scope, cluster *clusterv1.Cluster, openStackClust
 	return nil
 }
 
-func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster) (ctrl.Result, error) { //nolint:unparam
+func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster, availableServerIPs []string) (ctrl.Result, error) { //nolint:unparam
 	scope.Logger().Info("Reconciling Cluster")
 
 	// If the OpenStackCluster doesn't have our finalizer, add it.
@@ -328,6 +330,22 @@ func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackClu
 	openStackCluster.Status.Ready = true
 	openStackCluster.Status.FailureMessage = nil
 	openStackCluster.Status.FailureReason = nil
+
+	log.Printf("###BEFORE REAL DEFER %v, %v", availableServerIPs, openStackCluster.Status.AvailableServerIPs)
+	result, err = updateAvailableServerStatus(scope, openStackCluster, availableServerIPs)
+	if err != nil {
+		log.Printf("error occured %v", err)
+		return result, err
+	}
+	log.Printf("###AFTER REAL DEFER %v", openStackCluster.Status.AvailableServerIPs)
+
+	// defer func() {
+	// 	result, err := updateAvailableServerStatus(scope, openStackCluster, availableServerIPs)
+	// 	if err != nil {
+	// 		log.Printf("defer error occured %v", err)
+	// 		return result, err
+	// 	}
+	// }()
 	//testtesttest
 	// if openStackCluster.Status.AvailableServerIPs == nil || openStackCluster.Status.AvailableServerIPs[0] == "false" {
 	// 	log.Printf("########nil openstackcluster available serverip %v", openStackCluster.Status.AvailableServerIPs)
@@ -338,6 +356,23 @@ func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackClu
 	// scope.Logger().Info("Reconciled Cluster created successfully")
 	// //testtesttest
 	return reconcile.Result{}, nil
+}
+
+func updateAvailableServerStatus(scope scope.Scope, openStackCluster *infrav1.OpenStackCluster, availableServerIPs []string) (ctrl.Result, error) {
+	scope.Logger().Info("Reconciling AvailableServer")
+	// openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,[]string{"172.21.4.1"}...)
+	log.Printf("### init defer %v", openStackCluster.Status.AvailableServerIPs)
+	for _, availableServerIP := range availableServerIPs {
+		if !slices.Contains(openStackCluster.Status.AvailableServerIPs, availableServerIP) {
+			openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,availableServerIP)
+		}
+	}
+	log.Printf("### before defer %v", openStackCluster.Status.AvailableServerIPs)
+	// openStackCluster.Status.AvailableServerIPs = []string{"172.21.4.1"}
+	// log.Printf("###defer %v", openStackCluster.Status.AvailableServerIPs)
+	// openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,"aaa")
+	// log.Printf("###second defer %v", openStackCluster.Status.AvailableServerIPs)
+	return ctrl.Result{}, nil
 }
 
 func reconcileBastion(scope scope.Scope, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster) (ctrl.Result, error) {
