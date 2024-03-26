@@ -76,6 +76,7 @@ type OpenStackClusterReconciler struct {
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;clusters/status,verbs=get;list;watch
 
 func (r *OpenStackClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, reterr error) {
+	log.Printf("######REAL RECONCILE")
 	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch the OpenStackCluster instance

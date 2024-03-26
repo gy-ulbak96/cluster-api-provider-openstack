@@ -383,7 +383,7 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 	openStackMachine.Status.Addresses = addresses
 
 	//testtesttesttest
-
+	openStackMachineList := &infrav1.OpenStackMachineList{}
 	for _, adr := range addresses {
 		adrbyte, err := json.Marshal(adr)
 		if err != nil {
@@ -400,6 +400,7 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 			// if openStackCluster.Status.AvailableServerIPs[0] == "false" {
 			// 	openStackCluster.Status.AvailableServerIPs = nil
 			// }
+			log.Printf("######LIST %v", openStackMachineList.Items)
 			log.Printf("BEFORE what is the openstackcluster.status %v",openStackCluster.Status.AvailableServerIPs)
 			AvailableServerIPs = append(AvailableServerIPs,adrmap["address"])			
 		}
