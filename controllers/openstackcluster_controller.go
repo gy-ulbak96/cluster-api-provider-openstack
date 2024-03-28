@@ -51,11 +51,6 @@ import (
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/networking"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
 	utils "sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/controllers"
-
-	//testtesttest
-	"log"
-	"slices"
-	//testtesttest
 )
 
 const (
@@ -76,7 +71,6 @@ type OpenStackClusterReconciler struct {
 // +kubebuilder:rbac:groups=cluster.x-k8s.io,resources=clusters;clusters/status,verbs=get;list;watch
 
 func (r *OpenStackClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, reterr error) {
-	log.Printf("######REAL RECONCILE")
 	log := ctrl.LoggerFrom(ctx)
 
 	// Fetch the OpenStackCluster instance
@@ -332,13 +326,11 @@ func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackClu
 	openStackCluster.Status.FailureMessage = nil
 	openStackCluster.Status.FailureReason = nil
 
-	log.Printf("###BEFORE REAL DEFER %v, %v", availableServerIPs, openStackCluster.Status.AvailableServerIPs)
-	result, err = updateAvailableServerStatus(scope, openStackCluster, availableServerIPs)
-	if err != nil {
-		log.Printf("error occured %v", err)
-		return result, err
-	}
-	log.Printf("###AFTER REAL DEFER %v", openStackCluster.Status.AvailableServerIPs)
+	// result, err = updateAvailableServerStatus(scope, openStackCluster, availableServerIPs)
+	// if err != nil {
+	// 	logg.Printf("error occured %v", err)
+	// 	return result, err
+	// }
 
 	// defer func() {
 	// 	result, err := updateAvailableServerStatus(scope, openStackCluster, availableServerIPs)
@@ -349,7 +341,7 @@ func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackClu
 	// }()
 	//testtesttest
 	// if openStackCluster.Status.AvailableServerIPs == nil || openStackCluster.Status.AvailableServerIPs[0] == "false" {
-	// 	log.Printf("########nil openstackcluster available serverip %v", openStackCluster.Status.AvailableServerIPs)
+	// 	log.Printf("########nil openstackcluster availablse serverip %v", openStackCluster.Status.AvailableServerIPs)
 	// 	openStackCluster.Status.AvailableServerIPs = []string{"false"}
 	// }
 	// UpdateAvailableServerStatus(openStackCluster)
@@ -359,22 +351,22 @@ func reconcileNormal(scope scope.Scope, cluster *clusterv1.Cluster, openStackClu
 	return reconcile.Result{}, nil
 }
 
-func updateAvailableServerStatus(scope scope.Scope, openStackCluster *infrav1.OpenStackCluster, availableServerIPs []string) (ctrl.Result, error) {
-	scope.Logger().Info("Reconciling AvailableServer")
-	// openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,[]string{"172.21.4.1"}...)
-	log.Printf("### init defer %v", openStackCluster.Status.AvailableServerIPs)
-	for _, availableServerIP := range availableServerIPs {
-		if !slices.Contains(openStackCluster.Status.AvailableServerIPs, availableServerIP) {
-			openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,availableServerIP)
-		}
-	}
-	log.Printf("### before defer %v", openStackCluster.Status.AvailableServerIPs)
-	// openStackCluster.Status.AvailableServerIPs = []string{"172.21.4.1"}
-	// log.Printf("###defer %v", openStackCluster.Status.AvailableServerIPs)
-	// openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,"aaa")
-	// log.Printf("###second defer %v", openStackCluster.Status.AvailableServerIPs)
-	return ctrl.Result{}, nil
-}
+// func updateAvailableServerStatus(scope scope.Scope, openStackCluster *infrav1.OpenStackCluster, availableServerIPs []string) (ctrl.Result, error) {
+// 	scope.Logger().Info("Reconciling AvailableServer")
+// 	// openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,[]string{"172.21.4.1"}...)
+// 	logg.Printf("### init defer %v", openStackCluster.Status.AvailableServerIPs)
+// 	for _, availableServerIP := range availableServerIPs {
+// 		if !slices.Contains(openStackCluster.Status.AvailableServerIPs, availableServerIP) {
+// 			openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,availableServerIP)
+// 		}
+// 	}
+// 	logg.Printf("### before defer %v", openStackCluster.Status.AvailableServerIPs)
+// 	// openStackCluster.Status.AvailableServerIPs = []string{"172.21.4.1"}
+// 	// log.Printf("###defer %v", openStackCluster.Status.AvailableServerIPs)
+// 	// openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,"aaa")
+// 	// log.Printf("###second defer %v", openStackCluster.Status.AvailableServerIPs)
+// 	return ctrl.Result{}, nil
+// }
 
 func reconcileBastion(scope scope.Scope, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster) (ctrl.Result, error) {
 	scope.Logger().Info("Reconciling Bastion")
@@ -646,7 +638,11 @@ func reconcileNetworkComponents(scope scope.Scope, cluster *clusterv1.Cluster, o
 		case openStackCluster.Spec.APIServerFixedIP != "":
 			// If a fixed IP was specified, assume that the user is providing the extra configuration
 			// to use that IP as the VIP for the API server, e.g. using keepalived or kube-vip
-			host = openStackCluster.Spec.APIServerFixedIP
+			// host = openStackCluster.Spec.APIServerFixedIP
+
+			//testtesttest
+			host = openStackCluster.Status.AvailableServerIPs[0]
+			//testtesttest
 		default:
 			// For now, we do not provide a managed VIP without either a load balancer or a floating IP
 			// In the future, we could manage a VIP port on the cluster network and set allowedAddressPairs

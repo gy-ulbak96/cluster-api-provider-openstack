@@ -57,6 +57,7 @@ import (
 	//testtesttest
 	"log"
 	"encoding/json"
+	"slices"
 	//testtesttest
 )
 
@@ -74,12 +75,6 @@ const (
 	waitForInstanceBecomeActiveToReconcile    = 60 * time.Second
 	waitForBuildingInstanceToReconcile        = 10 * time.Second
 )
-
-var (
-	openstackclusterReconciler       *OpenStackClusterReconciler
-	AvailableServerIPs []string
-)
-
 
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=openstackmachines,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=infrastructure.cluster.x-k8s.io,resources=openstackmachines/status,verbs=get;update;patch
@@ -166,7 +161,7 @@ func (r *OpenStackMachineReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Handle deleted machines
 	if !openStackMachine.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(scope, cluster, infraCluster, machine, openStackMachine)
+		return r.reconcileDelete(ctx, scope, cluster, infraCluster, machine, openStackMachine)
 	}
 
 	// Handle non-deleted clusters
@@ -237,7 +232,7 @@ func (r *OpenStackMachineReconciler) SetupWithManager(ctx context.Context, mgr c
 		Complete(r)
 }
 
-func (r *OpenStackMachineReconciler) reconcileDelete(scope scope.Scope, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster, machine *clusterv1.Machine, openStackMachine *infrav1.OpenStackMachine) (ctrl.Result, error) { //nolint:unparam
+func (r *OpenStackMachineReconciler) reconcileDelete(ctx context.Context, scope scope.Scope, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster, machine *clusterv1.Machine, openStackMachine *infrav1.OpenStackMachine) (ctrl.Result, error) { //nolint:unparam
 	scope.Logger().Info("Reconciling Machine delete")
 
 	clusterName := fmt.Sprintf("%s-%s", cluster.ObjectMeta.Namespace, cluster.Name)
@@ -286,7 +281,31 @@ func (r *OpenStackMachineReconciler) reconcileDelete(scope scope.Scope, cluster 
 			}
 
 			addresses := instanceNS.Addresses()
+			//testtesttest
+			log.Printf("DEEEELLLETEEEEE ADDRESSSSES%v, %T", addresses, addresses)
+			//testtesttest
 			for _, address := range addresses {
+				//testtesttest
+				adrbyte, err := json.Marshal(address)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("address marshal error occured: %w", err)
+				}
+				log.Printf("MMMARSSSHAL DEEEELLLETEEEEE ADDRESSSSES%v", string(adrbyte))
+				adrmap := make(map[string]string)
+				if err := json.Unmarshal(adrbyte, &adrmap); err != nil {
+					return ctrl.Result{}, fmt.Errorf("address unmarshal error occured: %w", err)
+				}	
+	
+				if adrmap["type"] == "InternalIP"{
+					log.Printf("loook at the IP %v, %T", adrmap["address"], adrmap["address"])
+					if slices.Contains(openStackCluster.Status.AvailableServerIPs, adrmap["address"]){
+						index := slices.Index(openStackCluster.Status.AvailableServerIPs, adrmap["address"])
+						openStackCluster.Status.AvailableServerIPs = slices.Delete(openStackCluster.Status.AvailableServerIPs, index, index+1)	
+						log.Printf("ADDRESS DELETED CHECK THE OPENSTACK CLUTER")
+					}
+				}
+
+				//testtesttest
 				if address.Type == corev1.NodeExternalIP {
 					if err = networkingService.DeleteFloatingIP(openStackMachine, address.Address); err != nil {
 						conditions.MarkFalse(openStackMachine, infrav1.APIServerIngressReadyCondition, infrav1.FloatingIPErrorReason, clusterv1.ConditionSeverityError, "Deleting floating IP failed: %v", err)
@@ -296,6 +315,12 @@ func (r *OpenStackMachineReconciler) reconcileDelete(scope scope.Scope, cluster 
 			}
 		}
 	}
+	//testtesttest
+	if err := r.Client.Status().Update(ctx, openStackCluster); err != nil {
+		log.Printf("Error Occured when update AvailableServerIp of OpenstackCluster %v", err)
+		return ctrl.Result{}, err
+	}				
+	//testtesttest
 
 	instanceSpec := machineToInstanceSpec(openStackCluster, machine, openStackMachine, "")
 
@@ -382,31 +407,38 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 	})
 	openStackMachine.Status.Addresses = addresses
 
-	//testtesttesttest
-	openStackMachineList := &infrav1.OpenStackMachineList{}
-	for _, adr := range addresses {
-		adrbyte, err := json.Marshal(adr)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("address marshal error occured: %w", err)
+	//testtesttest
+	if util.IsControlPlaneMachine(machine) {
+		var AvailableServerIPs []string
+		for _, adr := range addresses {
+			adrbyte, err := json.Marshal(adr)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("address marshal error occured: %w", err)
+			}
+
+			adrmap := make(map[string]string)
+			if err := json.Unmarshal(adrbyte, &adrmap); err != nil {
+				return ctrl.Result{}, fmt.Errorf("address unmarshal error occured: %w", err)
+			}	
+
+			if adrmap["type"] == "InternalIP"{
+				log.Printf("loook at the IP %v, %T", adrmap["address"], adrmap["address"])
+				AvailableServerIPs = append(AvailableServerIPs,adrmap["address"])			
+			}
 		}
 
-		adrmap := make(map[string]string)
-		if err := json.Unmarshal(adrbyte, &adrmap); err != nil {
-			return ctrl.Result{}, fmt.Errorf("address unmarshal error occured: %w", err)
-		}	
-
-		if adrmap["type"] == "InternalIP"{
-			log.Printf("loook at the IP %v, %T", adrmap["address"], adrmap["address"])
-			// if openStackCluster.Status.AvailableServerIPs[0] == "false" {
-			// 	openStackCluster.Status.AvailableServerIPs = nil
-			// }
-			log.Printf("######LIST %v", openStackMachineList.Items)
-			log.Printf("BEFORE what is the openstackcluster.status %v",openStackCluster.Status.AvailableServerIPs)
-			AvailableServerIPs = append(AvailableServerIPs,adrmap["address"])			
+		for _, availableServerIP := range AvailableServerIPs {
+			if !slices.Contains(openStackCluster.Status.AvailableServerIPs, availableServerIP) {
+				openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,availableServerIP)
+			}
 		}
-		reconcileNormal(scope, cluster, openStackCluster, AvailableServerIPs)
 	}
-	//testtesttesttest
+
+	if err := r.Client.Status().Update(ctx, openStackCluster); err != nil {
+		log.Printf("Error Occured when update AvailableServerIp of OpenstackCluster %v", err)
+		return ctrl.Result{}, err
+	}
+	//testtesttest
 
 	switch instanceStatus.State() {
 	case infrav1.InstanceStateActive:
@@ -481,6 +513,15 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 
 	scope.Logger().Info("Reconciled Machine create successfully")
 	return ctrl.Result{}, nil
+}
+
+func createRequestFromOSCluster2(openStackCluster *infrav1.OpenStackCluster) reconcile.Request {
+	return reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      openStackCluster.GetName(),
+			Namespace: openStackCluster.GetNamespace(),
+		},
+	}
 }
 
 func (r *OpenStackMachineReconciler) getOrCreate(logger logr.Logger, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster, machine *clusterv1.Machine, openStackMachine *infrav1.OpenStackMachine, computeService *compute.Service, userData string) (*compute.InstanceStatus, error) {
