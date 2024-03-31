@@ -17,6 +17,7 @@ limitations under the License.
 package networking
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/gophercloud/gophercloud"
@@ -24,11 +25,13 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/external"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
+	"k8s.io/utils/pointer"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha8"
+	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/metrics"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/record"
 	capoerrors "sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/errors"
+	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/filterconvert"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/names"
 )
 
@@ -76,57 +79,49 @@ func (c createOpts) ToNetworkCreateMap() (map[string]interface{}, error) {
 // - no external network was given in the cluster spec and no external network was found
 // - the user has set OpenStackCluster.Spec.DisableExternalNetwork to true.
 func (s *Service) ReconcileExternalNetwork(openStackCluster *infrav1.OpenStackCluster) error {
-	var listOpts external.ListOptsExt
-	var emptyExternalnetwork infrav1.NetworkFilter
-	var isAutoDetecting bool
-
-	if openStackCluster.Spec.DisableExternalNetwork {
+	if pointer.BoolDeref(openStackCluster.Spec.DisableExternalNetwork, false) {
 		s.scope.Logger().Info("External network is disabled - proceeding with internal network only")
 		openStackCluster.Status.ExternalNetwork = nil
 		return nil
 	}
 
-	if openStackCluster.Spec.ExternalNetwork != emptyExternalnetwork {
-		listOpts = external.ListOptsExt{
-			ListOptsBuilder: openStackCluster.Spec.ExternalNetwork.ToListOpt(),
-		}
-	} else {
-		// ExternalNetwork is not given so we'll list all networks and filter for external networks
-		isAutoDetecting = true
-		listOpts = external.ListOptsExt{
-			ListOptsBuilder: networks.ListOpts{},
-			External:        &isAutoDetecting,
-		}
-	}
+	var network *networks.Network
+	if openStackCluster.Spec.ExternalNetwork == nil {
+		// No external network specified in the cluster spec. Default behaviour: query all external networks.
+		// * If there's only one, use that.
+		// * If there's none don't use an external network.
+		// * If there's more than one it's an error.
 
-	networkList, err := s.client.ListNetwork(listOpts)
-	if err != nil {
-		return err
-	}
-
-	switch len(networkList) {
-	case 0:
-		if isAutoDetecting {
-			// Not finding an external network is fine if ExternalNetwork is not set
+		// Empty NetworkFilter will query all networks
+		var err error
+		network, err = s.getNetworkByFilter(&infrav1.NetworkFilter{}, ExternalNetworksOnly)
+		if errors.Is(err, ErrNoMatches) {
 			openStackCluster.Status.ExternalNetwork = nil
 			s.scope.Logger().Info("No external network found - proceeding with internal network only")
 			return nil
 		}
-		return fmt.Errorf("no external network found")
-	case 1:
-		openStackCluster.Status.ExternalNetwork = &infrav1.NetworkStatus{
-			ID:   networkList[0].ID,
-			Name: networkList[0].Name,
-			Tags: networkList[0].Tags,
+		if err != nil {
+			return fmt.Errorf("failed to get external network: %w", err)
 		}
-		s.scope.Logger().Info("External network found", "id", networkList[0].ID)
-		return nil
+	} else {
+		var err error
+		network, err = s.GetNetworkByParam(openStackCluster.Spec.ExternalNetwork, ExternalNetworksOnly)
+		if err != nil {
+			return fmt.Errorf("failed to get external network: %w", err)
+		}
 	}
-	return fmt.Errorf("found %d external networks, which should not happen", len(networkList))
+
+	openStackCluster.Status.ExternalNetwork = &infrav1.NetworkStatus{
+		ID:   network.ID,
+		Name: network.Name,
+		Tags: network.Tags,
+	}
+	s.scope.Logger().Info("External network found", "id", network.ID)
+	return nil
 }
 
-func (s *Service) ReconcileNetwork(openStackCluster *infrav1.OpenStackCluster, clusterName string) error {
-	networkName := getNetworkName(clusterName)
+func (s *Service) ReconcileNetwork(openStackCluster *infrav1.OpenStackCluster, clusterResourceName string) error {
+	networkName := getNetworkName(clusterResourceName)
 	s.scope.Logger().Info("Reconciling network", "name", networkName)
 
 	res, err := s.getNetworkByName(networkName)
@@ -149,12 +144,12 @@ func (s *Service) ReconcileNetwork(openStackCluster *infrav1.OpenStackCluster, c
 		Name:         networkName,
 	}
 
-	if openStackCluster.Spec.DisablePortSecurity {
+	if pointer.BoolDeref(openStackCluster.Spec.DisablePortSecurity, false) {
 		opts.PortSecurityEnabled = gophercloud.Disabled
 	}
 
-	if openStackCluster.Spec.NetworkMTU > 0 {
-		opts.MTU = &openStackCluster.Spec.NetworkMTU
+	if openStackCluster.Spec.NetworkMTU != nil {
+		opts.MTU = openStackCluster.Spec.NetworkMTU
 	}
 
 	network, err := s.client.CreateNetwork(opts)
@@ -180,8 +175,8 @@ func (s *Service) ReconcileNetwork(openStackCluster *infrav1.OpenStackCluster, c
 	return nil
 }
 
-func (s *Service) DeleteNetwork(openStackCluster *infrav1.OpenStackCluster, clusterName string) error {
-	networkName := getNetworkName(clusterName)
+func (s *Service) DeleteNetwork(openStackCluster *infrav1.OpenStackCluster, clusterResourceName string) error {
+	networkName := getNetworkName(clusterResourceName)
 	network, err := s.getNetworkByName(networkName)
 	if err != nil {
 		return err
@@ -200,31 +195,33 @@ func (s *Service) DeleteNetwork(openStackCluster *infrav1.OpenStackCluster, clus
 	return nil
 }
 
-func (s *Service) ReconcileSubnet(openStackCluster *infrav1.OpenStackCluster, clusterName string) error {
+func (s *Service) ReconcileSubnet(openStackCluster *infrav1.OpenStackCluster, clusterResourceName string) error {
 	if openStackCluster.Status.Network == nil || openStackCluster.Status.Network.ID == "" {
 		s.scope.Logger().V(4).Info("No need to reconcile network components since no network exists")
 		return nil
 	}
 
-	subnetName := getSubnetName(clusterName)
+	subnetName := getSubnetName(clusterResourceName)
 	s.scope.Logger().Info("Reconciling subnet", "name", subnetName)
 
 	subnetList, err := s.client.ListSubnet(subnets.ListOpts{
 		NetworkID: openStackCluster.Status.Network.ID,
-		CIDR:      openStackCluster.Spec.NodeCIDR,
+		// Currently we only support 1 SubnetSpec.
+		CIDR: openStackCluster.Spec.ManagedSubnets[0].CIDR,
 	})
 	if err != nil {
 		return err
 	}
 
 	if len(subnetList) > 1 {
-		return fmt.Errorf("found %d subnets with the name %s, which should not happen", len(subnetList), subnetName)
+		return fmt.Errorf("found %d subnets with the CIDR %s and network %s, which should not happen",
+			len(subnetList), openStackCluster.Spec.ManagedSubnets[0], openStackCluster.Status.Network.ID)
 	}
 
 	var subnet *subnets.Subnet
 	if len(subnetList) == 0 {
 		var err error
-		subnet, err = s.createSubnet(openStackCluster, clusterName, subnetName)
+		subnet, err = s.createSubnet(openStackCluster, clusterResourceName, subnetName)
 		if err != nil {
 			return err
 		}
@@ -244,14 +241,18 @@ func (s *Service) ReconcileSubnet(openStackCluster *infrav1.OpenStackCluster, cl
 	return nil
 }
 
-func (s *Service) createSubnet(openStackCluster *infrav1.OpenStackCluster, clusterName string, name string) (*subnets.Subnet, error) {
+func (s *Service) createSubnet(openStackCluster *infrav1.OpenStackCluster, clusterResourceName string, name string) (*subnets.Subnet, error) {
 	opts := subnets.CreateOpts{
 		NetworkID:      openStackCluster.Status.Network.ID,
 		Name:           name,
 		IPVersion:      4,
-		CIDR:           openStackCluster.Spec.NodeCIDR,
-		DNSNameservers: openStackCluster.Spec.DNSNameservers,
-		Description:    names.GetDescription(clusterName),
+		CIDR:           openStackCluster.Spec.ManagedSubnets[0].CIDR,
+		DNSNameservers: openStackCluster.Spec.ManagedSubnets[0].DNSNameservers,
+		Description:    names.GetDescription(clusterResourceName),
+	}
+
+	for _, pool := range openStackCluster.Spec.ManagedSubnets[0].AllocationPools {
+		opts.AllocationPools = append(opts.AllocationPools, subnets.AllocationPool{Start: pool.Start, End: pool.End})
 	}
 
 	subnet, err := s.client.CreateSubnet(opts)
@@ -293,32 +294,66 @@ func (s *Service) getNetworkByName(networkName string) (networks.Network, error)
 	return networks.Network{}, fmt.Errorf("found %d networks with the name %s, which should not happen", len(networkList), networkName)
 }
 
-// GetNetworksByFilter retrieves networks by querying openstack with filters.
-func (s *Service) GetNetworksByFilter(opts networks.ListOptsBuilder) ([]networks.Network, error) {
-	if opts == nil {
-		return nil, fmt.Errorf("no Filters were passed")
+type GetNetworkOpts func(networks.ListOptsBuilder) networks.ListOptsBuilder
+
+func ExternalNetworksOnly(opts networks.ListOptsBuilder) networks.ListOptsBuilder {
+	return &external.ListOptsExt{
+		ListOptsBuilder: opts,
+		External:        pointer.Bool(true),
 	}
-	networkList, err := s.client.ListNetwork(opts)
-	if err != nil {
-		return nil, err
-	}
-	if len(networkList) == 0 {
-		return nil, fmt.Errorf("no networks could be found with the filters provided")
-	}
-	return networkList, nil
 }
 
-// GetNetworkIDsByFilter retrieves network ids by querying openstack with filters.
-func (s *Service) GetNetworkIDsByFilter(opts networks.ListOptsBuilder) ([]string, error) {
-	nets, err := s.GetNetworksByFilter(opts)
+// getNetworksByFilter retrieves networks by querying openstack with filters.
+func (s *Service) getNetworkByFilter(filter *infrav1.NetworkFilter, opts ...GetNetworkOpts) (*networks.Network, error) {
+	var listOpts networks.ListOptsBuilder
+	listOpts = filterconvert.NetworkFilterToListOpts(filter)
+	for _, opt := range opts {
+		listOpts = opt(listOpts)
+	}
+
+	networks, err := s.client.ListNetwork(listOpts)
 	if err != nil {
 		return nil, err
 	}
-	ids := []string{}
-	for _, network := range nets {
-		ids = append(ids, network.ID)
+	if len(networks) == 0 {
+		return nil, ErrNoMatches
 	}
-	return ids, nil
+	if len(networks) > 1 {
+		return nil, ErrMultipleMatches
+	}
+	return &networks[0], nil
+}
+
+// GetNetworkByParam gets the network specified by the given NetworkParam.
+func (s *Service) GetNetworkByParam(param *infrav1.NetworkParam, opts ...GetNetworkOpts) (*networks.Network, error) {
+	if param.ID != nil {
+		return s.GetNetworkByID(*param.ID)
+	}
+
+	if param.Filter == nil {
+		return nil, errors.New("no filter or ID provided")
+	}
+
+	return s.getNetworkByFilter(param.Filter, opts...)
+}
+
+// GetNetworkIDByParam returns the ID of the network specified by the given
+// NetworkParam. It does not make an OpenStack call if the network is specified
+// by ID.
+func (s *Service) GetNetworkIDByParam(param *infrav1.NetworkParam, opts ...GetNetworkOpts) (string, error) {
+	if param.ID != nil {
+		return *param.ID, nil
+	}
+
+	if param.Filter == nil {
+		return "", errors.New("no filter or ID provided")
+	}
+
+	network, err := s.getNetworkByFilter(param.Filter, opts...)
+	if err != nil {
+		return "", err
+	}
+	return network.ID, nil
 }
 
 // GetSubnetsByFilter gets the id of a subnet by querying openstack with filters.
@@ -336,31 +371,49 @@ func (s *Service) GetSubnetsByFilter(opts subnets.ListOptsBuilder) ([]subnets.Su
 	return subnetList, nil
 }
 
-// GetSubnetByFilter gets a single subnet specified by the given SubnetFilter.
-// It returns an ErrFilterMatch if no or multiple subnets are found.
-func (s *Service) GetSubnetByFilter(filter *infrav1.SubnetFilter) (*subnets.Subnet, error) {
-	return s.getSubnetByFilter(filter.ToListOpt())
+// GetSubnetIDByParam gets the id of a subnet from the given SubnetParam. It
+// does not make any OpenStack API calls if the subnet is specified by ID.
+func (s *Service) GetSubnetIDByParam(param *infrav1.SubnetParam) (string, error) {
+	if param.ID != nil {
+		return *param.ID, nil
+	}
+	subnet, err := s.GetSubnetByParam(param)
+	if err != nil {
+		return "", err
+	}
+	return subnet.ID, nil
 }
 
-// GetNetworkSubnetByFilter gets a single subnet of the given network, specified by the given SubnetFilter.
+// GetSubnetByParam gets a single subnet specified by the given SubnetParam
 // It returns an ErrFilterMatch if no or multiple subnets are found.
-func (s *Service) GetNetworkSubnetByFilter(networkID string, filter *infrav1.SubnetFilter) (*subnets.Subnet, error) {
-	listOpt := filter.ToListOpt()
-	listOpt.NetworkID = networkID
-
-	return s.getSubnetByFilter(listOpt)
+func (s *Service) GetSubnetByParam(param *infrav1.SubnetParam) (*subnets.Subnet, error) {
+	return s.GetNetworkSubnetByParam("", param)
 }
 
-// getSubnetByFilter gets a single subnet specified by the given gophercloud ListOpts.
+// GetNetworkSubnetByParam gets a single subnet of the given network, specified by the given SubnetParam.
 // It returns an ErrFilterMatch if no or multiple subnets are found.
-func (s *Service) getSubnetByFilter(listOpts subnets.ListOpts) (*subnets.Subnet, error) {
-	// If the ID is set, we can just get the subnet by ID.
-	if listOpts.ID != "" {
-		subnet, err := s.client.GetSubnet(listOpts.ID)
+func (s *Service) GetNetworkSubnetByParam(networkID string, param *infrav1.SubnetParam) (*subnets.Subnet, error) {
+	if param.ID != nil {
+		subnet, err := s.client.GetSubnet(*param.ID)
 		if capoerrors.IsNotFound(err) {
 			return nil, ErrNoMatches
 		}
+
+		if networkID != "" && subnet.NetworkID != networkID {
+			s.scope.Logger().V(4).Info("Subnet specified by ID does not belong to the given network", "subnetID", subnet.ID, "networkID", networkID)
+			return nil, ErrNoMatches
+		}
 		return subnet, err
+	}
+
+	if param.Filter == nil {
+		// Should have been caught by validation
+		return nil, errors.New("subnet filter: both id and filter are nil")
+	}
+
+	listOpts := filterconvert.SubnetFilterToListOpts(param.Filter)
+	if networkID != "" {
+		listOpts.NetworkID = networkID
 	}
 
 	subnets, err := s.GetSubnetsByFilter(listOpts)
@@ -376,22 +429,19 @@ func (s *Service) getSubnetByFilter(listOpts subnets.ListOpts) (*subnets.Subnet,
 	return &subnets[0], nil
 }
 
-func getSubnetName(clusterName string) string {
-	return fmt.Sprintf("%s-cluster-%s", networkPrefix, clusterName)
+func getSubnetName(clusterResourceName string) string {
+	return fmt.Sprintf("%s-cluster-%s", networkPrefix, clusterResourceName)
 }
 
-func getNetworkName(clusterName string) string {
-	return fmt.Sprintf("%s-cluster-%s", networkPrefix, clusterName)
+func getNetworkName(clusterResourceName string) string {
+	return fmt.Sprintf("%s-cluster-%s", networkPrefix, clusterResourceName)
 }
 
-// ConvertOpenStackSubnetToCAPOSubnet converts an OpenStack subnet to a capo subnet and adds to a slice.
-// It returns the slice with the converted subnet.
-func (s *Service) ConvertOpenStackSubnetToCAPOSubnet(subnets []infrav1.Subnet, filteredSubnet *subnets.Subnet) []infrav1.Subnet {
-	subnets = append(subnets, infrav1.Subnet{
-		ID:   filteredSubnet.ID,
-		Name: filteredSubnet.Name,
-		CIDR: filteredSubnet.CIDR,
-		Tags: filteredSubnet.Tags,
-	})
-	return subnets
+// GetNetworkByID retrieves network by the ID.
+func (s *Service) GetNetworkByID(networkID string) (*networks.Network, error) {
+	network, err := s.client.GetNetwork(networkID)
+	if err != nil {
+		return &networks.Network{}, err
+	}
+	return network, nil
 }

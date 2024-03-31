@@ -22,125 +22,51 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/testr"
 	"github.com/golang/mock/gomock"
-	"github.com/google/go-cmp/cmp"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
-	common "github.com/gophercloud/gophercloud/openstack/common/extensions"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/attachinterfaces"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/attributestags"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/trunks"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
-	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 	. "github.com/onsi/gomega"
-	. "github.com/onsi/gomega/gstruct"
-	gomegatypes "github.com/onsi/gomega/types"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/pointer"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha8"
+	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/clients"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/clients/mock"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/networking"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
 )
 
-type gomegaMockMatcher struct {
-	matcher     gomegatypes.GomegaMatcher
-	description string
-}
-
-func newGomegaMockMatcher(matcher gomegatypes.GomegaMatcher) *gomegaMockMatcher {
-	return &gomegaMockMatcher{
-		matcher:     matcher,
-		description: "",
-	}
-}
-
-func (m *gomegaMockMatcher) String() string {
-	return m.description
-}
-
-func (m *gomegaMockMatcher) Matches(x interface{}) bool {
-	success, err := m.matcher.Match(x)
-	Expect(err).NotTo(HaveOccurred())
-	if !success {
-		m.description = m.matcher.FailureMessage(x)
-	}
-	return success
-}
-
-func Test_getPortName(t *testing.T) {
-	type args struct {
-		instanceName string
-		opts         *infrav1.PortOpts
-		netIndex     int
-	}
-	tests := []struct {
-		name string
-		args args
-		want string
-	}{
-		{
-			name: "with nil PortOpts",
-			args: args{"test-1-instance", nil, 2},
-			want: "test-1-instance-2",
-		},
-		{
-			name: "with PortOpts name suffix",
-			args: args{"test-1-instance", &infrav1.PortOpts{NameSuffix: "foo"}, 4},
-			want: "test-1-instance-foo",
-		},
-		{
-			name: "without PortOpts name suffix",
-			args: args{"test-1-instance", &infrav1.PortOpts{}, 4},
-			want: "test-1-instance-4",
-		},
-		{
-			name: "with PortOpts name suffix",
-			args: args{"test-1-instance", &infrav1.PortOpts{NameSuffix: "foo2", Network: &infrav1.NetworkFilter{ID: "bar"}, DisablePortSecurity: pointer.Bool(true)}, 4},
-			want: "test-1-instance-foo2",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := networking.GetPortName(tt.args.instanceName, tt.args.opts, tt.args.netIndex); got != tt.want {
-				t.Errorf("getPortName() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestService_getImageID(t *testing.T) {
-	const imageID = "ce96e584-7ebc-46d6-9e55-987d72e3806c"
-	const imageName = "test-image"
+	imageID := "ce96e584-7ebc-46d6-9e55-987d72e3806c"
+	imageName := "test-image"
 	imageTags := []string{"test-tag"}
 
 	tests := []struct {
 		testName string
-		image    infrav1.ImageFilter
+		image    infrav1.ImageParam
 		expect   func(m *mock.MockImageClientMockRecorder)
 		want     string
 		wantErr  bool
 	}{
 		{
 			testName: "Return image ID when ID given",
-			image:    infrav1.ImageFilter{ID: imageID},
+			image:    infrav1.ImageParam{ID: &imageID},
 			want:     imageID,
 			expect:   func(m *mock.MockImageClientMockRecorder) {},
 			wantErr:  false,
 		},
 		{
 			testName: "Return image ID when name given",
-			image:    infrav1.ImageFilter{Name: imageName},
-			want:     imageID,
+			image: infrav1.ImageParam{
+				Filter: &infrav1.ImageFilter{
+					Name: &imageName,
+				},
+			},
+			want: imageID,
 			expect: func(m *mock.MockImageClientMockRecorder) {
 				m.ListImages(images.ListOpts{Name: imageName}).Return(
 					[]images.Image{{ID: imageID, Name: imageName}},
@@ -150,8 +76,12 @@ func TestService_getImageID(t *testing.T) {
 		},
 		{
 			testName: "Return image ID when tags given",
-			image:    infrav1.ImageFilter{Tags: imageTags},
-			want:     imageID,
+			image: infrav1.ImageParam{
+				Filter: &infrav1.ImageFilter{
+					Tags: imageTags,
+				},
+			},
+			want: imageID,
 			expect: func(m *mock.MockImageClientMockRecorder) {
 				m.ListImages(images.ListOpts{Tags: imageTags}).Return(
 					[]images.Image{{ID: imageID, Name: imageName, Tags: imageTags}},
@@ -161,7 +91,11 @@ func TestService_getImageID(t *testing.T) {
 		},
 		{
 			testName: "Return no results",
-			image:    infrav1.ImageFilter{Name: imageName},
+			image: infrav1.ImageParam{
+				Filter: &infrav1.ImageFilter{
+					Name: &imageName,
+				},
+			},
 			expect: func(m *mock.MockImageClientMockRecorder) {
 				m.ListImages(images.ListOpts{Name: imageName}).Return(
 					[]images.Image{},
@@ -172,7 +106,11 @@ func TestService_getImageID(t *testing.T) {
 		},
 		{
 			testName: "Return multiple results",
-			image:    infrav1.ImageFilter{Name: imageName},
+			image: infrav1.ImageParam{
+				Filter: &infrav1.ImageFilter{
+					Name: &imageName,
+				},
+			},
 			expect: func(m *mock.MockImageClientMockRecorder) {
 				m.ListImages(images.ListOpts{Name: "test-image"}).Return(
 					[]images.Image{
@@ -185,7 +123,11 @@ func TestService_getImageID(t *testing.T) {
 		},
 		{
 			testName: "OpenStack returns error",
-			image:    infrav1.ImageFilter{Name: imageName},
+			image: infrav1.ImageParam{
+				Filter: &infrav1.ImageFilter{
+					Name: &imageName,
+				},
+			},
 			expect: func(m *mock.MockImageClientMockRecorder) {
 				m.ListImages(images.ListOpts{Name: "test-image"}).Return(
 					nil,
@@ -198,9 +140,10 @@ func TestService_getImageID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.testName, func(t *testing.T) {
 			mockCtrl := gomock.NewController(t)
-			mockScopeFactory := scope.NewMockScopeFactory(mockCtrl, "", logr.Discard())
+			log := testr.New(t)
+			mockScopeFactory := scope.NewMockScopeFactory(mockCtrl, "")
 
-			s, err := NewService(mockScopeFactory)
+			s, err := NewService(scope.NewWithLogger(mockScopeFactory, log))
 			if err != nil {
 				t.Fatalf("Failed to create service: %v", err)
 			}
@@ -217,6 +160,8 @@ func TestService_getImageID(t *testing.T) {
 		})
 	}
 }
+
+var portUUIDs = []string{"e7b7f3d1-0a81-40b1-bfa6-a22a31b17816"}
 
 const (
 	networkUUID                     = "d412171b-9fd7-41c1-95a6-c24e5953974d"
@@ -240,24 +185,6 @@ const (
 	failureDomain        = "test-failure-domain"
 )
 
-func getDefaultOpenStackCluster() *infrav1.OpenStackCluster {
-	return &infrav1.OpenStackCluster{
-		Spec: infrav1.OpenStackClusterSpec{},
-		Status: infrav1.OpenStackClusterStatus{
-			Network: &infrav1.NetworkStatusWithSubnets{
-				NetworkStatus: infrav1.NetworkStatus{
-					ID: networkUUID,
-				},
-				Subnets: []infrav1.Subnet{
-					{ID: subnetUUID},
-				},
-			},
-			ControlPlaneSecurityGroup: &infrav1.SecurityGroup{ID: controlPlaneSecurityGroupUUID},
-			WorkerSecurityGroup:       &infrav1.SecurityGroup{ID: workerSecurityGroupUUID},
-		},
-	}
-}
-
 func getDefaultInstanceSpec() *InstanceSpec {
 	return &InstanceSpec{
 		Name:       openStackMachineName,
@@ -268,11 +195,10 @@ func getDefaultInstanceSpec() *InstanceSpec {
 		Metadata: map[string]string{
 			"test-metadata": "test-value",
 		},
-		ConfigDrive:    *pointer.Bool(true),
-		FailureDomain:  *pointer.String(failureDomain),
-		ServerGroupID:  serverGroupUUID,
-		Tags:           []string{"test-tag"},
-		SecurityGroups: []infrav1.SecurityGroupFilter{{ID: workerSecurityGroupUUID}},
+		ConfigDrive:   *pointer.Bool(true),
+		FailureDomain: *pointer.String(failureDomain),
+		ServerGroupID: serverGroupUUID,
+		Tags:          []string{"test-tag"},
 	}
 }
 
@@ -325,54 +251,6 @@ func TestService_ReconcileInstance(t *testing.T) {
 			},
 			ServerAvailabilityZoneExt: availabilityzones.ServerAvailabilityZoneExt{},
 		}
-	}
-
-	// Expected calls to create a server with a single default port
-	expectUseExistingDefaultPort := func(networkRecorder *mock.MockNetworkClientMockRecorder) {
-		// Returning a pre-existing port requires fewer mocks
-		networkRecorder.ListPort(ports.ListOpts{
-			Name:      portName,
-			NetworkID: networkUUID,
-		}).Return([]ports.Port{
-			{
-				ID:        portUUID,
-				NetworkID: networkUUID,
-			},
-		}, nil)
-	}
-
-	expectCreatePort := func(networkRecorder *mock.MockNetworkClientMockRecorder, name string, networkID string) {
-		networkRecorder.ListPort(ports.ListOpts{
-			Name:      name,
-			NetworkID: networkID,
-		}).Return([]ports.Port{}, nil)
-
-		// gomock won't match a pointer to a nil slice in SecurityGroups, so we do this
-		networkRecorder.CreatePort(gomock.Any()).DoAndReturn(func(createOpts ports.CreateOptsBuilder) (*ports.Port, error) {
-			createOptsMap, err := createOpts.ToPortCreateMap()
-			Expect(err).NotTo(HaveOccurred())
-
-			// Match only the fields we're interested in
-			portOpts := createOptsMap["port"].(map[string]interface{})
-			Expect(portOpts).To(MatchKeys(IgnoreExtras, Keys{
-				"network_id": Equal(networkUUID),
-				"name":       Equal(portName),
-			}))
-
-			return &ports.Port{
-				ID:          portUUID,
-				NetworkID:   networkUUID,
-				Name:        portName,
-				Description: portOpts["description"].(string),
-			}, nil
-		})
-		networkRecorder.ReplaceAllAttributesTags("ports", portUUID, attributestags.ReplaceAllOpts{Tags: []string{"test-tag"}}).Return(nil, nil)
-	}
-
-	// Expected calls if we delete the network port
-	expectCleanupDefaultPort := func(networkRecorder *mock.MockNetworkClientMockRecorder) {
-		networkRecorder.ListExtensions()
-		networkRecorder.DeletePort(portUUID).Return(nil)
 	}
 
 	// Expected calls when using default flavor
@@ -444,51 +322,11 @@ func TestService_ReconcileInstance(t *testing.T) {
 			name:            "Defaults",
 			getInstanceSpec: getDefaultInstanceSpec,
 			expect: func(r *recorders) {
-				expectUseExistingDefaultPort(r.network)
 				expectDefaultFlavor(r.compute)
 
 				expectCreateServer(r.compute, getDefaultServerMap(), false)
 			},
 			wantErr: false,
-		},
-		{
-			name:            "Delete ports on server create error",
-			getInstanceSpec: getDefaultInstanceSpec,
-			expect: func(r *recorders) {
-				expectUseExistingDefaultPort(r.network)
-				expectDefaultFlavor(r.compute)
-
-				expectCreateServer(r.compute, getDefaultServerMap(), true)
-
-				// Make sure we delete ports
-				expectCleanupDefaultPort(r.network)
-			},
-			wantErr: true,
-		},
-		{
-			name: "Delete previously created ports on port creation error",
-			getInstanceSpec: func() *InstanceSpec {
-				s := getDefaultInstanceSpec()
-				s.Ports = []infrav1.PortOpts{
-					{Description: "Test port 0"},
-					{Description: "Test port 1"},
-				}
-				return s
-			},
-			expect: func(r *recorders) {
-				expectDefaultFlavor(r.compute)
-				expectUseExistingDefaultPort(r.network)
-
-				// Looking up the second port fails
-				r.network.ListPort(ports.ListOpts{
-					Name:      "test-openstack-machine-1",
-					NetworkID: networkUUID,
-				}).Return(nil, fmt.Errorf("test error"))
-
-				// We should cleanup the first port
-				expectCleanupDefaultPort(r.network)
-			},
-			wantErr: true,
 		},
 		{
 			name: "Boot from volume success",
@@ -500,7 +338,6 @@ func TestService_ReconcileInstance(t *testing.T) {
 				return s
 			},
 			expect: func(r *recorders) {
-				expectUseExistingDefaultPort(r.network)
 				expectDefaultFlavor(r.compute)
 
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-root", openStackMachineName)}).
@@ -545,7 +382,6 @@ func TestService_ReconcileInstance(t *testing.T) {
 				return s
 			},
 			expect: func(r *recorders) {
-				expectUseExistingDefaultPort(r.network)
 				expectDefaultFlavor(r.compute)
 
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-root", openStackMachineName)}).
@@ -589,7 +425,6 @@ func TestService_ReconcileInstance(t *testing.T) {
 				return s
 			},
 			expect: func(r *recorders) {
-				expectUseExistingDefaultPort(r.network)
 				expectDefaultFlavor(r.compute)
 
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-root", openStackMachineName)}).
@@ -603,8 +438,6 @@ func TestService_ReconcileInstance(t *testing.T) {
 					Multiattach:      false,
 				}).Return(&volumes.Volume{ID: rootVolumeUUID}, nil)
 				expectVolumePoll(r.volume, rootVolumeUUID, []string{"creating", "error"})
-
-				expectCleanupDefaultPort(r.network)
 			},
 			wantErr: true,
 		},
@@ -637,7 +470,6 @@ func TestService_ReconcileInstance(t *testing.T) {
 				return s
 			},
 			expect: func(r *recorders) {
-				expectUseExistingDefaultPort(r.network)
 				expectDefaultFlavor(r.compute)
 
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-root", openStackMachineName)}).
@@ -724,7 +556,6 @@ func TestService_ReconcileInstance(t *testing.T) {
 				return s
 			},
 			expect: func(r *recorders) {
-				expectUseExistingDefaultPort(r.network)
 				expectDefaultFlavor(r.compute)
 
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-etcd", openStackMachineName)}).
@@ -792,7 +623,6 @@ func TestService_ReconcileInstance(t *testing.T) {
 				return s
 			},
 			expect: func(r *recorders) {
-				expectUseExistingDefaultPort(r.network)
 				expectDefaultFlavor(r.compute)
 
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-etcd", openStackMachineName)}).
@@ -848,68 +678,7 @@ func TestService_ReconcileInstance(t *testing.T) {
 				return s
 			},
 			expect: func(r *recorders) {
-				expectUseExistingDefaultPort(r.network)
 				expectDefaultFlavor(r.compute)
-
-				// Make sure we delete ports
-				expectCleanupDefaultPort(r.network)
-			},
-			wantErr: true,
-		},
-		{
-			name: "Delete trunks on port creation error",
-			getInstanceSpec: func() *InstanceSpec {
-				s := getDefaultInstanceSpec()
-				s.Ports = []infrav1.PortOpts{
-					{Description: "Test port 0", Trunk: pointer.Bool(true)},
-					{Description: "Test port 1"},
-				}
-				return s
-			},
-			expect: func(r *recorders) {
-				expectDefaultFlavor(r.compute)
-				extensions := []extensions.Extension{
-					{Extension: common.Extension{Alias: "trunk"}},
-				}
-				r.network.ListExtensions().Return(extensions, nil)
-
-				expectCreatePort(r.network, portName, networkUUID)
-
-				// Check for existing trunk
-				r.network.ListTrunk(newGomegaMockMatcher(
-					MatchFields(IgnoreExtras, Fields{
-						"Name":   Equal(portName),
-						"PortID": Equal(portUUID),
-					}),
-				)).Return([]trunks.Trunk{}, nil)
-
-				// Create new trunk
-				r.network.CreateTrunk(newGomegaMockMatcher(MatchFields(IgnoreExtras, Fields{
-					"Name":   Equal(portName),
-					"PortID": Equal(portUUID),
-				}))).Return(&trunks.Trunk{
-					PortID: portUUID,
-					ID:     trunkUUID,
-				}, nil)
-				r.network.ReplaceAllAttributesTags("trunks", trunkUUID, attributestags.ReplaceAllOpts{Tags: []string{"test-tag"}}).Return(nil, nil)
-
-				// Looking up the second port fails
-				r.network.ListPort(ports.ListOpts{
-					Name:      "test-openstack-machine-1",
-					NetworkID: networkUUID,
-				}).Return(nil, fmt.Errorf("test error"))
-
-				r.network.ListExtensions().Return(extensions, nil)
-
-				r.network.ListTrunk(newGomegaMockMatcher(
-					MatchFields(IgnoreExtras, Fields{
-						"PortID": Equal(portUUID),
-					}),
-				)).Return([]trunks.Trunk{{ID: trunkUUID}}, nil)
-
-				// We should cleanup the first port and its trunk
-				r.network.DeleteTrunk(trunkUUID).Return(nil)
-				r.network.DeletePort(portUUID).Return(nil)
 			},
 			wantErr: true,
 		},
@@ -917,7 +686,8 @@ func TestService_ReconcileInstance(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockCtrl := gomock.NewController(t)
-			mockScopeFactory := scope.NewMockScopeFactory(mockCtrl, "", logr.Discard())
+			log := testr.New(t)
+			mockScopeFactory := scope.NewMockScopeFactory(mockCtrl, "")
 
 			computeRecorder := mockScopeFactory.ComputeClient.EXPECT()
 			imageRecorder := mockScopeFactory.ImageClient.EXPECT()
@@ -926,13 +696,13 @@ func TestService_ReconcileInstance(t *testing.T) {
 
 			tt.expect(&recorders{computeRecorder, imageRecorder, networkRecorder, volumeRecorder})
 
-			s, err := NewService(mockScopeFactory)
+			s, err := NewService(scope.NewWithLogger(mockScopeFactory, log))
 			if err != nil {
 				t.Fatalf("Failed to create service: %v", err)
 			}
 
 			// Call CreateInstance with a reduced retry interval to speed up the test
-			_, err = s.createInstanceImpl(&infrav1.OpenStackMachine{}, getDefaultOpenStackCluster(), tt.getInstanceSpec(), "cluster-name", time.Nanosecond)
+			_, err = s.createInstanceImpl(&infrav1.OpenStackMachine{}, tt.getInstanceSpec(), time.Nanosecond, portUUIDs)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Service.CreateInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -977,21 +747,6 @@ func TestService_DeleteInstance(t *testing.T) {
 			eventObject:    &infrav1.OpenStackMachine{},
 			instanceStatus: getDefaultInstanceStatus,
 			expect: func(r *recorders) {
-				r.compute.ListAttachedInterfaces(instanceUUID).Return([]attachinterfaces.Interface{
-					{
-						PortID: portUUID,
-					},
-				}, nil)
-				r.network.ListExtensions().Return([]extensions.Extension{{
-					Extension: common.Extension{
-						Alias: "trunk",
-					},
-				}}, nil)
-				r.compute.DeleteAttachedInterface(instanceUUID, portUUID).Return(nil)
-				// FIXME: Why we are looking for a trunk when we know the port is not trunked?
-				r.network.ListTrunk(trunks.ListOpts{PortID: portUUID}).Return([]trunks.Trunk{}, nil)
-				r.network.DeletePort(portUUID).Return(nil)
-
 				r.compute.DeleteServer(instanceUUID).Return(nil)
 				r.compute.GetServer(instanceUUID).Return(nil, gophercloud.ErrDefault404{})
 			},
@@ -1025,7 +780,8 @@ func TestService_DeleteInstance(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockCtrl := gomock.NewController(t)
-			mockScopeFactory := scope.NewMockScopeFactory(mockCtrl, "", logr.Discard())
+			log := testr.New(t)
+			mockScopeFactory := scope.NewMockScopeFactory(mockCtrl, "")
 
 			computeRecorder := mockScopeFactory.ComputeClient.EXPECT()
 			networkRecorder := mockScopeFactory.NetworkClient.EXPECT()
@@ -1033,7 +789,7 @@ func TestService_DeleteInstance(t *testing.T) {
 
 			tt.expect(&recorders{computeRecorder, networkRecorder, volumeRecorder})
 
-			s, err := NewService(mockScopeFactory)
+			s, err := NewService(scope.NewWithLogger(mockScopeFactory, log))
 			if err != nil {
 				t.Fatalf("Failed to create service: %v", err)
 			}
@@ -1043,372 +799,9 @@ func TestService_DeleteInstance(t *testing.T) {
 				RootVolume: tt.rootVolume,
 			}
 
-			if err := s.DeleteInstance(&infrav1.OpenStackCluster{}, tt.eventObject, tt.instanceStatus(), instanceSpec); (err != nil) != tt.wantErr {
+			if err := s.DeleteInstance(tt.eventObject, tt.instanceStatus(), instanceSpec); (err != nil) != tt.wantErr {
 				t.Errorf("Service.DeleteInstance() error = %v, wantErr %v", err, tt.wantErr)
 			}
-		})
-	}
-}
-
-func TestService_normalizePorts(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	defer mockCtrl.Finish()
-
-	const (
-		defaultNetworkID = "3c66f3ca-2d26-4d9d-ae3b-568f54129773"
-		defaultSubnetID  = "d8dbba89-8c39-4192-a571-e702fca35bac"
-
-		networkID = "afa54944-1443-4132-9ef5-ce37eb4d6ab6"
-		subnetID  = "d786e715-c299-4a97-911d-640c10fc0392"
-	)
-
-	openStackCluster := &infrav1.OpenStackCluster{
-		Status: infrav1.OpenStackClusterStatus{
-			Network: &infrav1.NetworkStatusWithSubnets{
-				NetworkStatus: infrav1.NetworkStatus{
-					ID: defaultNetworkID,
-				},
-				Subnets: []infrav1.Subnet{
-					{ID: defaultSubnetID},
-				},
-			},
-		},
-	}
-
-	tests := []struct {
-		name          string
-		ports         []infrav1.PortOpts
-		instanceTrunk bool
-		expectNetwork func(m *mock.MockNetworkClientMockRecorder)
-		want          []infrav1.PortOpts
-		wantErr       bool
-	}{
-		{
-			name:  "No ports: no ports",
-			ports: []infrav1.PortOpts{},
-			want:  []infrav1.PortOpts{},
-		},
-		{
-			name: "Nil network, no fixed IPs: cluster defaults",
-			ports: []infrav1.PortOpts{
-				{
-					Network:  nil,
-					FixedIPs: nil,
-				},
-			},
-			want: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						ID: defaultNetworkID,
-					},
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								ID: defaultSubnetID,
-							},
-						},
-					},
-					Trunk: pointer.Bool(false),
-				},
-			},
-		},
-		{
-			name: "Empty network, no fixed IPs: cluster defaults",
-			ports: []infrav1.PortOpts{
-				{
-					Network:  &infrav1.NetworkFilter{},
-					FixedIPs: nil,
-				},
-			},
-			want: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						ID: defaultNetworkID,
-					},
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								ID: defaultSubnetID,
-							},
-						},
-					},
-					Trunk: pointer.Bool(false),
-				},
-			},
-		},
-		{
-			name: "Port inherits trunk from instance",
-			ports: []infrav1.PortOpts{
-				{
-					Network:  &infrav1.NetworkFilter{},
-					FixedIPs: nil,
-				},
-			},
-			instanceTrunk: true,
-			want: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						ID: defaultNetworkID,
-					},
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								ID: defaultSubnetID,
-							},
-						},
-					},
-					Trunk: pointer.Bool(true),
-				},
-			},
-		},
-		{
-			name: "Port overrides trunk from instance",
-			ports: []infrav1.PortOpts{
-				{
-					Network:  &infrav1.NetworkFilter{},
-					FixedIPs: nil,
-					Trunk:    pointer.Bool(true),
-				},
-			},
-			want: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						ID: defaultNetworkID,
-					},
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								ID: defaultSubnetID,
-							},
-						},
-					},
-					Trunk: pointer.Bool(true),
-				},
-			},
-		},
-		{
-			name: "Network defined by ID: unchanged",
-			ports: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						ID: networkID,
-					},
-				},
-			},
-			want: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						ID: networkID,
-					},
-					Trunk: pointer.Bool(false),
-				},
-			},
-		},
-		{
-			name: "Network defined by filter: add ID from network lookup",
-			ports: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						Name: "test-network",
-					},
-				},
-			},
-			expectNetwork: func(m *mock.MockNetworkClientMockRecorder) {
-				m.ListNetwork(networks.ListOpts{Name: "test-network"}).Return([]networks.Network{
-					{ID: networkID},
-				}, nil)
-			},
-			want: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						ID:   networkID,
-						Name: "test-network",
-					},
-					Trunk: pointer.Bool(false),
-				},
-			},
-		},
-		{
-			name: "No network, fixed IP has subnet by ID: add ID from subnet",
-			ports: []infrav1.PortOpts{
-				{
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								ID: subnetID,
-							},
-						},
-					},
-				},
-			},
-			expectNetwork: func(m *mock.MockNetworkClientMockRecorder) {
-				m.GetSubnet(subnetID).Return(&subnets.Subnet{ID: subnetID, NetworkID: networkID}, nil)
-			},
-			want: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						ID: networkID,
-					},
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								ID: subnetID,
-							},
-						},
-					},
-					Trunk: pointer.Bool(false),
-				},
-			},
-		},
-		{
-			name: "No network, fixed IP has subnet by filter: add ID from subnet",
-			ports: []infrav1.PortOpts{
-				{
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								Name: "test-subnet",
-							},
-						},
-					},
-				},
-			},
-			expectNetwork: func(m *mock.MockNetworkClientMockRecorder) {
-				m.ListSubnet(subnets.ListOpts{Name: "test-subnet"}).Return([]subnets.Subnet{
-					{ID: subnetID, NetworkID: networkID},
-				}, nil)
-			},
-			want: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						ID: networkID,
-					},
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								ID:   subnetID,
-								Name: "test-subnet",
-							},
-						},
-					},
-					Trunk: pointer.Bool(false),
-				},
-			},
-		},
-		{
-			name: "No network, fixed IP subnet returns no matches: error",
-			ports: []infrav1.PortOpts{
-				{
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								Name: "test-subnet",
-							},
-						},
-					},
-				},
-			},
-			expectNetwork: func(m *mock.MockNetworkClientMockRecorder) {
-				m.ListSubnet(subnets.ListOpts{Name: "test-subnet"}).Return([]subnets.Subnet{}, nil)
-			},
-			wantErr: true,
-		},
-		{
-			name: "No network, only fixed IP subnet returns multiple matches: error",
-			ports: []infrav1.PortOpts{
-				{
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								Name: "test-subnet",
-							},
-						},
-					},
-				},
-			},
-			expectNetwork: func(m *mock.MockNetworkClientMockRecorder) {
-				m.ListSubnet(subnets.ListOpts{Name: "test-subnet"}).Return([]subnets.Subnet{
-					{ID: subnetID, NetworkID: networkID},
-					{ID: "8008494c-301e-4e5c-951b-a8ab568447fd", NetworkID: "5d48bfda-db28-42ee-8374-50e13d1fe5ea"},
-				}, nil)
-			},
-			wantErr: true,
-		},
-		{
-			name: "No network, first fixed IP subnet returns multiple matches: used ID from second fixed IP",
-			ports: []infrav1.PortOpts{
-				{
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								Name: "test-subnet1",
-							},
-						},
-						{
-							Subnet: &infrav1.SubnetFilter{
-								Name: "test-subnet2",
-							},
-						},
-					},
-				},
-			},
-			expectNetwork: func(m *mock.MockNetworkClientMockRecorder) {
-				m.ListSubnet(subnets.ListOpts{Name: "test-subnet1"}).Return([]subnets.Subnet{
-					{ID: subnetID, NetworkID: networkID},
-					{ID: "8008494c-301e-4e5c-951b-a8ab568447fd", NetworkID: "5d48bfda-db28-42ee-8374-50e13d1fe5ea"},
-				}, nil)
-				m.ListSubnet(subnets.ListOpts{Name: "test-subnet2"}).Return([]subnets.Subnet{
-					{ID: subnetID, NetworkID: networkID},
-				}, nil)
-			},
-			want: []infrav1.PortOpts{
-				{
-					Network: &infrav1.NetworkFilter{
-						ID: networkID,
-					},
-					FixedIPs: []infrav1.FixedIP{
-						{
-							Subnet: &infrav1.SubnetFilter{
-								Name: "test-subnet1",
-							},
-						},
-						{
-							Subnet: &infrav1.SubnetFilter{
-								ID:   subnetID,
-								Name: "test-subnet2",
-							},
-						},
-					},
-					Trunk: pointer.Bool(false),
-				},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-
-			// MockScopeFactory also implements Scope so no need to create separate Scope from it.
-			mockScope := scope.NewMockScopeFactory(mockCtrl, "", logr.Discard())
-			if tt.expectNetwork != nil {
-				tt.expectNetwork(mockScope.NetworkClient.EXPECT())
-			}
-
-			s := &Service{
-				scope: mockScope,
-			}
-			instanceSpec := &InstanceSpec{
-				Trunk: tt.instanceTrunk,
-			}
-
-			got, err := s.normalizePorts(tt.ports, openStackCluster, instanceSpec)
-			if tt.wantErr {
-				g.Expect(err).To(HaveOccurred())
-				return
-			}
-
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(got).To(Equal(tt.want), cmp.Diff(got, tt.want))
 		})
 	}
 }

@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha1"
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha8"
+	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/clients"
 )
 
@@ -54,7 +54,24 @@ type Scope interface {
 	NewImageClient() (clients.ImageClient, error)
 	NewNetworkClient() (clients.NetworkClient, error)
 	NewLbClient() (clients.LbClient, error)
-	Logger() logr.Logger
 	ProjectID() string
 	ExtractToken() (*tokens.Token, error)
+}
+
+// WithLogger extends Scope with a logger.
+type WithLogger struct {
+	Scope
+
+	logger logr.Logger
+}
+
+func NewWithLogger(scope Scope, logger logr.Logger) *WithLogger {
+	return &WithLogger{
+		Scope:  scope,
+		logger: logger,
+	}
+}
+
+func (s *WithLogger) Logger() logr.Logger {
+	return s.logger
 }

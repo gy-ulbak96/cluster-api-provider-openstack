@@ -17,8 +17,10 @@ limitations under the License.
 package v1alpha7
 
 import (
+	"slices"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	fuzz "github.com/google/gofuzz"
 	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/apitesting/fuzzer"
@@ -29,7 +31,7 @@ import (
 	utilconversion "sigs.k8s.io/cluster-api/util/conversion"
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha8"
+	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	testhelpers "sigs.k8s.io/cluster-api-provider-openstack/test/helpers"
 )
 
@@ -56,20 +58,40 @@ func TestFuzzyConversion(t *testing.T) {
 	}
 
 	fuzzerFuncs := func(_ runtimeserializer.CodecFactory) []interface{} {
-		return []interface{}{
-			func(spec *infrav1.OpenStackClusterSpec, c fuzz.Continue) {
+		v1alpha7FuzzerFuncs := []interface{}{
+			func(spec *OpenStackMachineSpec, c fuzz.Continue) {
 				c.FuzzNoCustom(spec)
 
-				// The fuzzer only seems to generate Subnets of
-				// length 1, but we need to also test length 2.
-				// Ensure it is occasionally generated.
-				if len(spec.Subnets) == 1 && c.RandBool() {
-					subnet := infrav1.SubnetFilter{}
-					c.FuzzNoCustom(&subnet)
-					spec.Subnets = append(spec.Subnets, subnet)
+				// RandString() generates strings up to 20
+				// characters long. To exercise truncation of
+				// long server metadata keys and values we need
+				// the possibility of strings > 255 chars.
+				genLongString := func() string {
+					var ret string
+					for len(ret) < 255 {
+						ret += c.RandString()
+					}
+					return ret
+				}
+
+				// Existing server metadata keys will be short. Add a random number of long ones.
+				for c.RandBool() {
+					if spec.ServerMetadata == nil {
+						spec.ServerMetadata = map[string]string{}
+					}
+					spec.ServerMetadata[genLongString()] = c.RandString()
+				}
+
+				// Randomly make some server metadata values long.
+				for k := range spec.ServerMetadata {
+					if c.RandBool() {
+						spec.ServerMetadata[k] = genLongString()
+					}
 				}
 			},
 		}
+
+		return slices.Concat(v1alpha7FuzzerFuncs, testhelpers.InfraV1FuzzerFuncs())
 	}
 
 	t.Run("for OpenStackCluster", runParallel(utilconversion.FuzzTestFunc(utilconversion.FuzzTestFuncInput{
@@ -225,6 +247,113 @@ func TestMachineConversionControllerSpecFields(t *testing.T) {
 			if tt.testAfter != nil {
 				tt.testAfter(&after)
 			}
+		})
+	}
+}
+
+func TestConvert_v1alpha7_OpenStackClusterSpec_To_v1beta1_OpenStackClusterSpec(t *testing.T) {
+	tests := []struct {
+		name        string
+		in          *OpenStackClusterSpec
+		expectedOut *infrav1.OpenStackClusterSpec
+	}{
+		{
+			name:        "empty",
+			in:          &OpenStackClusterSpec{},
+			expectedOut: &infrav1.OpenStackClusterSpec{},
+		},
+		{
+			name: "with managed security groups and not allow all in cluster traffic",
+			in: &OpenStackClusterSpec{
+				ManagedSecurityGroups:    true,
+				AllowAllInClusterTraffic: false,
+			},
+			expectedOut: &infrav1.OpenStackClusterSpec{
+				ManagedSecurityGroups: &infrav1.ManagedSecurityGroups{
+					AllNodesSecurityGroupRules: infrav1.LegacyCalicoSecurityGroupRules(),
+				},
+			},
+		},
+		{
+			name: "with managed security groups and allow all in cluster traffic",
+			in: &OpenStackClusterSpec{
+				ManagedSecurityGroups:    true,
+				AllowAllInClusterTraffic: true,
+			},
+			expectedOut: &infrav1.OpenStackClusterSpec{
+				ManagedSecurityGroups: &infrav1.ManagedSecurityGroups{
+					AllowAllInClusterTraffic: true,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			out := &infrav1.OpenStackClusterSpec{}
+			err := Convert_v1alpha7_OpenStackClusterSpec_To_v1beta1_OpenStackClusterSpec(tt.in.DeepCopy(), out, nil)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(out).To(gomega.Equal(tt.expectedOut), cmp.Diff(out, tt.expectedOut))
+		})
+
+		t.Run("template_"+tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			in := &OpenStackClusterTemplateSpec{
+				Template: OpenStackClusterTemplateResource{
+					Spec: *(tt.in.DeepCopy()),
+				},
+			}
+			out := &infrav1.OpenStackClusterTemplateSpec{}
+			err := Convert_v1alpha7_OpenStackClusterTemplateSpec_To_v1beta1_OpenStackClusterTemplateSpec(in, out, nil)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(&out.Template.Spec).To(gomega.Equal(tt.expectedOut), cmp.Diff(&out.Template.Spec, tt.expectedOut))
+		})
+	}
+}
+
+func TestConvert_v1alpha7_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(t *testing.T) {
+	tests := []struct {
+		name        string
+		in          *OpenStackMachineSpec
+		expectedOut *infrav1.OpenStackMachineSpec
+	}{
+		{
+			name:        "empty",
+			in:          &OpenStackMachineSpec{},
+			expectedOut: &infrav1.OpenStackMachineSpec{},
+		},
+		{
+			name: "empty port",
+			in: &OpenStackMachineSpec{
+				Ports: []PortOpts{{}},
+			},
+			expectedOut: &infrav1.OpenStackMachineSpec{
+				Ports: []infrav1.PortOpts{{}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			out := &infrav1.OpenStackMachineSpec{}
+			err := Convert_v1alpha7_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(tt.in.DeepCopy(), out, nil)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(out).To(gomega.Equal(tt.expectedOut), cmp.Diff(out, tt.expectedOut))
+		})
+
+		t.Run("template_"+tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			in := &OpenStackMachineTemplateSpec{
+				Template: OpenStackMachineTemplateResource{
+					Spec: *(tt.in.DeepCopy()),
+				},
+			}
+			out := &infrav1.OpenStackMachineTemplateSpec{}
+			err := Convert_v1alpha7_OpenStackMachineTemplateSpec_To_v1beta1_OpenStackMachineTemplateSpec(in, out, nil)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(&out.Template.Spec).To(gomega.Equal(tt.expectedOut), cmp.Diff(&out.Template.Spec, tt.expectedOut))
 		})
 	}
 }

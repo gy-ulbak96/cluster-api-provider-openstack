@@ -70,7 +70,7 @@
     IMAGE_URLS+="https://storage.googleapis.com/artifacts.k8s-staging-capi-openstack.appspot.com/test/cirros/2022-12-05/cirros-0.6.1-x86_64-disk.img,"
     IMAGE_URLS+="https://storage.googleapis.com/artifacts.k8s-staging-capi-openstack.appspot.com/test/ubuntu/2023-09-29/ubuntu-2204-kube-v1.27.2.img,"
     IMAGE_URLS+="https://storage.googleapis.com/artifacts.k8s-staging-capi-openstack.appspot.com/test/ubuntu/2024-01-10/ubuntu-2204-kube-v1.28.5.img,"
-    IMAGE_URLS+="https://storage.googleapis.com/artifacts.k8s-staging-capi-openstack.appspot.com/test/flatcar/flatcar-stable-3602.2.3-kube-v1.28.5.img,"
+    IMAGE_URLS+="https://storage.googleapis.com/artifacts.k8s-staging-capi-openstack.appspot.com/test/flatcar/flatcar-stable-3815.2.0-kube-v1.28.5.img,"
     IMAGE_URLS+="https://stable.release.flatcar-linux.net/amd64-usr/current/flatcar_production_openstack_image.img"
 
     [[post-config|$NOVA_CONF]]
@@ -177,6 +177,8 @@
     openstack flavor create --ram 4192 --disk 20 --ephemeral 5 --vcpus 2 --public --id 2 m1.small --property hw_rng:allowed='True'
     openstack flavor delete m1.medium
     openstack flavor create --ram 6144 --disk 20 --ephemeral 5 --vcpus 2 --public --id 3 m1.medium --property hw_rng:allowed='True'
+    # Create an additional flavor for the e2e tests that will be used by the e2e bastion tests
+    openstack flavor create --ram 512 --disk 1 --ephemeral 1 --vcpus 1 --public --id 10 m1.tiny.alt --property hw_rng:allowed='True'
 
     # Adjust the CPU quota
     openstack quota set --cores 32 demo

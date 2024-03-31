@@ -17,8 +17,10 @@ limitations under the License.
 package v1alpha6
 
 import (
+	"slices"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	fuzz "github.com/google/gofuzz"
 	"github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/apitesting/fuzzer"
@@ -29,7 +31,7 @@ import (
 	utilconversion "sigs.k8s.io/cluster-api/util/conversion"
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha8"
+	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	testhelpers "sigs.k8s.io/cluster-api-provider-openstack/test/helpers"
 )
 
@@ -56,7 +58,7 @@ func TestFuzzyConversion(t *testing.T) {
 	}
 
 	fuzzerFuncs := func(_ runtimeserializer.CodecFactory) []interface{} {
-		return []interface{}{
+		v1alpha6FuzzerFuncs := []interface{}{
 			func(instance *Instance, c fuzz.Continue) {
 				c.FuzzNoCustom(instance)
 
@@ -89,19 +91,39 @@ func TestFuzzyConversion(t *testing.T) {
 				}
 			},
 
-			func(spec *infrav1.OpenStackClusterSpec, c fuzz.Continue) {
+			func(spec *OpenStackMachineSpec, c fuzz.Continue) {
 				c.FuzzNoCustom(spec)
 
-				// The fuzzer only seems to generate Subnets of
-				// length 1, but we need to also test length 2.
-				// Ensure it is occasionally generated.
-				if len(spec.Subnets) == 1 && c.RandBool() {
-					subnet := infrav1.SubnetFilter{}
-					c.FuzzNoCustom(&subnet)
-					spec.Subnets = append(spec.Subnets, subnet)
+				// RandString() generates strings up to 20
+				// characters long. To exercise truncation of
+				// long server metadata keys and values we need
+				// the possibility of strings > 255 chars.
+				genLongString := func() string {
+					var ret string
+					for len(ret) < 255 {
+						ret += c.RandString()
+					}
+					return ret
+				}
+
+				// Existing server metadata keys will be short. Add a random number of long ones.
+				for c.RandBool() {
+					if spec.ServerMetadata == nil {
+						spec.ServerMetadata = map[string]string{}
+					}
+					spec.ServerMetadata[genLongString()] = c.RandString()
+				}
+
+				// Randomly make some server metadata values long.
+				for k := range spec.ServerMetadata {
+					if c.RandBool() {
+						spec.ServerMetadata[k] = genLongString()
+					}
 				}
 			},
 		}
+
+		return slices.Concat(v1alpha6FuzzerFuncs, testhelpers.InfraV1FuzzerFuncs())
 	}
 
 	t.Run("for OpenStackCluster", runParallel(utilconversion.FuzzTestFunc(utilconversion.FuzzTestFuncInput{
@@ -125,6 +147,7 @@ func TestFuzzyConversion(t *testing.T) {
 		Hub:              &infrav1.OpenStackClusterTemplate{},
 		Spoke:            &OpenStackClusterTemplate{},
 		HubAfterMutation: ignoreDataAnnotation,
+		FuzzerFuncs:      []fuzzer.FuzzerFuncs{fuzzerFuncs},
 	})))
 
 	t.Run("for OpenStackClusterTemplate with mutate", runParallel(testhelpers.FuzzMutateTestFunc(testhelpers.FuzzMutateTestFuncInput{
@@ -197,8 +220,8 @@ func TestNetworksToPorts(t *testing.T) {
 			afterMachineSpec: infrav1.OpenStackMachineSpec{
 				Ports: []infrav1.PortOpts{
 					{
-						Network: &infrav1.NetworkFilter{
-							ID: networkuuid,
+						Network: &infrav1.NetworkParam{
+							ID: pointer.String(networkuuid),
 						},
 					},
 				},
@@ -224,14 +247,18 @@ func TestNetworksToPorts(t *testing.T) {
 			afterMachineSpec: infrav1.OpenStackMachineSpec{
 				Ports: []infrav1.PortOpts{
 					{
-						Network: &infrav1.NetworkFilter{
-							Name:        "network-name",
-							Description: "network-description",
-							ProjectID:   "project-id",
-							Tags:        "tags",
-							TagsAny:     "tags-any",
-							NotTags:     "not-tags",
-							NotTagsAny:  "not-tags-any",
+						Network: &infrav1.NetworkParam{
+							Filter: &infrav1.NetworkFilter{
+								Name:        "network-name",
+								Description: "network-description",
+								ProjectID:   "project-id",
+								FilterByNeutronTags: infrav1.FilterByNeutronTags{
+									Tags:       []infrav1.NeutronTag{"tags"},
+									TagsAny:    []infrav1.NeutronTag{"tags-any"},
+									NotTags:    []infrav1.NeutronTag{"not-tags"},
+									NotTagsAny: []infrav1.NeutronTag{"not-tags-any"},
+								},
+							},
 						},
 					},
 				},
@@ -254,13 +281,13 @@ func TestNetworksToPorts(t *testing.T) {
 			afterMachineSpec: infrav1.OpenStackMachineSpec{
 				Ports: []infrav1.PortOpts{
 					{
-						Network: &infrav1.NetworkFilter{
-							ID: networkuuid,
+						Network: &infrav1.NetworkParam{
+							ID: pointer.String(networkuuid),
 						},
 						FixedIPs: []infrav1.FixedIP{
 							{
-								Subnet: &infrav1.SubnetFilter{
-									ID: subnetuuid,
+								Subnet: &infrav1.SubnetParam{
+									ID: pointer.String(subnetuuid),
 								},
 							},
 						},
@@ -298,24 +325,28 @@ func TestNetworksToPorts(t *testing.T) {
 			afterMachineSpec: infrav1.OpenStackMachineSpec{
 				Ports: []infrav1.PortOpts{
 					{
-						Network: &infrav1.NetworkFilter{
-							ID: networkuuid,
+						Network: &infrav1.NetworkParam{
+							ID: pointer.String(networkuuid),
 						},
 						FixedIPs: []infrav1.FixedIP{
 							{
-								Subnet: &infrav1.SubnetFilter{
-									Name:            "subnet-name",
-									Description:     "subnet-description",
-									ProjectID:       "project-id",
-									IPVersion:       6,
-									GatewayIP:       "x.x.x.x",
-									CIDR:            "y.y.y.y",
-									IPv6AddressMode: "address-mode",
-									IPv6RAMode:      "ra-mode",
-									Tags:            "tags",
-									TagsAny:         "tags-any",
-									NotTags:         "not-tags",
-									NotTagsAny:      "not-tags-any",
+								Subnet: &infrav1.SubnetParam{
+									Filter: &infrav1.SubnetFilter{
+										Name:            "subnet-name",
+										Description:     "subnet-description",
+										ProjectID:       "project-id",
+										IPVersion:       6,
+										GatewayIP:       "x.x.x.x",
+										CIDR:            "y.y.y.y",
+										IPv6AddressMode: "address-mode",
+										IPv6RAMode:      "ra-mode",
+										FilterByNeutronTags: infrav1.FilterByNeutronTags{
+											Tags:       []infrav1.NeutronTag{"tags"},
+											TagsAny:    []infrav1.NeutronTag{"tags-any"},
+											NotTags:    []infrav1.NeutronTag{"not-tags"},
+											NotTagsAny: []infrav1.NeutronTag{"not-tags-any"},
+										},
+									},
 								},
 							},
 						},
@@ -356,36 +387,40 @@ func TestNetworksToPorts(t *testing.T) {
 			afterMachineSpec: infrav1.OpenStackMachineSpec{
 				Ports: []infrav1.PortOpts{
 					{
-						Network: &infrav1.NetworkFilter{
-							ID: networkuuid,
+						Network: &infrav1.NetworkParam{
+							ID: pointer.String(networkuuid),
 						},
 						FixedIPs: []infrav1.FixedIP{
 							{
-								Subnet: &infrav1.SubnetFilter{
-									ID: subnetuuid,
+								Subnet: &infrav1.SubnetParam{
+									ID: pointer.String(subnetuuid),
 								},
 							},
 						},
 					},
 					{
-						Network: &infrav1.NetworkFilter{
-							ID: networkuuid,
+						Network: &infrav1.NetworkParam{
+							ID: pointer.String(networkuuid),
 						},
 						FixedIPs: []infrav1.FixedIP{
 							{
-								Subnet: &infrav1.SubnetFilter{
-									Name:            "subnet-name",
-									Description:     "subnet-description",
-									ProjectID:       "project-id",
-									IPVersion:       6,
-									GatewayIP:       "x.x.x.x",
-									CIDR:            "y.y.y.y",
-									IPv6AddressMode: "address-mode",
-									IPv6RAMode:      "ra-mode",
-									Tags:            "tags",
-									TagsAny:         "tags-any",
-									NotTags:         "not-tags",
-									NotTagsAny:      "not-tags-any",
+								Subnet: &infrav1.SubnetParam{
+									Filter: &infrav1.SubnetFilter{
+										Name:            "subnet-name",
+										Description:     "subnet-description",
+										ProjectID:       "project-id",
+										IPVersion:       6,
+										GatewayIP:       "x.x.x.x",
+										CIDR:            "y.y.y.y",
+										IPv6AddressMode: "address-mode",
+										IPv6RAMode:      "ra-mode",
+										FilterByNeutronTags: infrav1.FilterByNeutronTags{
+											Tags:       []infrav1.NeutronTag{"tags"},
+											TagsAny:    []infrav1.NeutronTag{"tags-any"},
+											NotTags:    []infrav1.NeutronTag{"not-tags"},
+											NotTagsAny: []infrav1.NeutronTag{"not-tags-any"},
+										},
+									},
 								},
 							},
 						},
@@ -403,7 +438,7 @@ func TestNetworksToPorts(t *testing.T) {
 			after := infrav1.OpenStackMachine{}
 
 			g.Expect(before.ConvertTo(&after)).To(gomega.Succeed())
-			g.Expect(after.Spec).To(gomega.Equal(tt.afterMachineSpec))
+			g.Expect(after.Spec).To(gomega.Equal(tt.afterMachineSpec), cmp.Diff(after.Spec, tt.afterMachineSpec))
 		})
 	}
 }
@@ -420,27 +455,27 @@ func TestPortOptsConvertTo(t *testing.T) {
 
 	// Variables used in the tests
 	uuids := []string{"abc123", "123abc"}
-	securityGroupsUuids := []infrav1.SecurityGroupFilter{
-		{ID: uuids[0]},
-		{ID: uuids[1]},
+	securityGroupsUuids := []infrav1.SecurityGroupParam{
+		{ID: &uuids[0]},
+		{ID: &uuids[1]},
 	}
 	securityGroupFilter := []SecurityGroupParam{
 		{Name: "one"},
 		{UUID: "654cba"},
 	}
-	securityGroupFilterMerged := []infrav1.SecurityGroupFilter{
-		{Name: "one"},
-		{ID: "654cba"},
-		{ID: uuids[0]},
-		{ID: uuids[1]},
+	securityGroupFilterMerged := []infrav1.SecurityGroupParam{
+		{Filter: &infrav1.SecurityGroupFilter{Name: "one"}},
+		{ID: pointer.String("654cba")},
+		{ID: &uuids[0]},
+		{ID: &uuids[1]},
 	}
 	legacyPortProfile := map[string]string{
 		"capabilities": "[\"switchdev\"]",
 		"trusted":      "true",
 	}
 	convertedPortProfile := infrav1.BindingProfile{
-		OVSHWOffload: true,
-		TrustedVF:    true,
+		OVSHWOffload: pointer.Bool(true),
+		TrustedVF:    pointer.Bool(true),
 	}
 
 	tests := []struct {
@@ -458,8 +493,10 @@ func TestPortOptsConvertTo(t *testing.T) {
 				SecurityGroups: uuids,
 			}},
 			hubPortOpts: []infrav1.PortOpts{{
-				Profile:              convertedPortProfile,
-				SecurityGroupFilters: securityGroupsUuids,
+				ResolvedPortSpecFields: infrav1.ResolvedPortSpecFields{
+					Profile: &convertedPortProfile,
+				},
+				SecurityGroups: securityGroupsUuids,
 			}},
 		},
 		{
@@ -470,9 +507,16 @@ func TestPortOptsConvertTo(t *testing.T) {
 				SecurityGroupFilters: securityGroupFilter,
 			}},
 			hubPortOpts: []infrav1.PortOpts{{
-				Profile:              convertedPortProfile,
-				SecurityGroupFilters: securityGroupFilterMerged,
+				ResolvedPortSpecFields: infrav1.ResolvedPortSpecFields{
+					Profile: &convertedPortProfile,
+				},
+				SecurityGroups: securityGroupFilterMerged,
 			}},
+		},
+		{
+			name:          "Empty port",
+			spokePortOpts: []PortOpts{{}},
+			hubPortOpts:   []infrav1.PortOpts{{}},
 		},
 	}
 
@@ -503,7 +547,7 @@ func TestPortOptsConvertTo(t *testing.T) {
 			err := spokeMachineTemplate.ConvertTo(&convertedHub)
 			g.Expect(err).NotTo(gomega.HaveOccurred())
 			// Comparing spec only here since the conversion will also add annotations that we don't care about for the test
-			g.Expect(convertedHub.Spec).To(gomega.Equal(hubMachineTemplate.Spec))
+			g.Expect(convertedHub.Spec).To(gomega.Equal(hubMachineTemplate.Spec), cmp.Diff(convertedHub.Spec, hubMachineTemplate.Spec))
 		})
 	}
 }
@@ -609,6 +653,113 @@ func TestMachineConversionControllerSpecFields(t *testing.T) {
 				g.Expect(after.Spec.Networks).To(gomega.HaveLen(0))
 				g.Expect(after.Spec.Ports).To(gomega.HaveLen(1))
 			}
+		})
+	}
+}
+
+func TestConvert_v1alpha6_OpenStackClusterSpec_To_v1beta1_OpenStackClusterSpec(t *testing.T) {
+	tests := []struct {
+		name        string
+		in          *OpenStackClusterSpec
+		expectedOut *infrav1.OpenStackClusterSpec
+	}{
+		{
+			name:        "empty",
+			in:          &OpenStackClusterSpec{},
+			expectedOut: &infrav1.OpenStackClusterSpec{},
+		},
+		{
+			name: "with managed security groups and not allow all in cluster traffic",
+			in: &OpenStackClusterSpec{
+				ManagedSecurityGroups:    true,
+				AllowAllInClusterTraffic: false,
+			},
+			expectedOut: &infrav1.OpenStackClusterSpec{
+				ManagedSecurityGroups: &infrav1.ManagedSecurityGroups{
+					AllNodesSecurityGroupRules: infrav1.LegacyCalicoSecurityGroupRules(),
+				},
+			},
+		},
+		{
+			name: "with managed security groups and allow all in cluster traffic",
+			in: &OpenStackClusterSpec{
+				ManagedSecurityGroups:    true,
+				AllowAllInClusterTraffic: true,
+			},
+			expectedOut: &infrav1.OpenStackClusterSpec{
+				ManagedSecurityGroups: &infrav1.ManagedSecurityGroups{
+					AllowAllInClusterTraffic: true,
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			out := &infrav1.OpenStackClusterSpec{}
+			err := Convert_v1alpha6_OpenStackClusterSpec_To_v1beta1_OpenStackClusterSpec(tt.in.DeepCopy(), out, nil)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(out).To(gomega.Equal(tt.expectedOut), cmp.Diff(out, tt.expectedOut))
+		})
+
+		t.Run("template_"+tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			in := &OpenStackClusterTemplateSpec{
+				Template: OpenStackClusterTemplateResource{
+					Spec: *(tt.in.DeepCopy()),
+				},
+			}
+			out := &infrav1.OpenStackClusterTemplateSpec{}
+			err := Convert_v1alpha6_OpenStackClusterTemplateSpec_To_v1beta1_OpenStackClusterTemplateSpec(in, out, nil)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(&out.Template.Spec).To(gomega.Equal(tt.expectedOut), cmp.Diff(&out.Template.Spec, tt.expectedOut))
+		})
+	}
+}
+
+func TestConvert_v1alpha6_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(t *testing.T) {
+	tests := []struct {
+		name        string
+		in          *OpenStackMachineSpec
+		expectedOut *infrav1.OpenStackMachineSpec
+	}{
+		{
+			name:        "empty",
+			in:          &OpenStackMachineSpec{},
+			expectedOut: &infrav1.OpenStackMachineSpec{},
+		},
+		{
+			name: "empty port",
+			in: &OpenStackMachineSpec{
+				Ports: []PortOpts{{}},
+			},
+			expectedOut: &infrav1.OpenStackMachineSpec{
+				Ports: []infrav1.PortOpts{{}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			out := &infrav1.OpenStackMachineSpec{}
+			err := Convert_v1alpha6_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(tt.in.DeepCopy(), out, nil)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(out).To(gomega.Equal(tt.expectedOut), cmp.Diff(out, tt.expectedOut))
+		})
+
+		t.Run("template_"+tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			in := &OpenStackMachineTemplateSpec{
+				Template: OpenStackMachineTemplateResource{
+					Spec: *(tt.in.DeepCopy()),
+				},
+			}
+			out := &infrav1.OpenStackMachineTemplateSpec{}
+			err := Convert_v1alpha6_OpenStackMachineTemplateSpec_To_v1beta1_OpenStackMachineTemplateSpec(in, out, nil)
+			g.Expect(err).NotTo(gomega.HaveOccurred())
+			g.Expect(&out.Template.Spec).To(gomega.Equal(tt.expectedOut), cmp.Diff(&out.Template.Spec, tt.expectedOut))
 		})
 	}
 }

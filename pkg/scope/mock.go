@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha1"
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha8"
+	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/clients"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/clients/mock"
 )
@@ -40,12 +40,11 @@ type MockScopeFactory struct {
 	ImageClient   *mock.MockImageClient
 	LbClient      *mock.MockLbClient
 
-	logger                 logr.Logger
 	projectID              string
 	clientScopeCreateError error
 }
 
-func NewMockScopeFactory(mockCtrl *gomock.Controller, projectID string, logger logr.Logger) *MockScopeFactory {
+func NewMockScopeFactory(mockCtrl *gomock.Controller, projectID string) *MockScopeFactory {
 	computeClient := mock.NewMockComputeClient(mockCtrl)
 	volumeClient := mock.NewMockVolumeClient(mockCtrl)
 	imageClient := mock.NewMockImageClient(mockCtrl)
@@ -59,7 +58,6 @@ func NewMockScopeFactory(mockCtrl *gomock.Controller, projectID string, logger l
 		NetworkClient: networkClient,
 		LbClient:      lbClient,
 		projectID:     projectID,
-		logger:        logger,
 	}
 }
 
@@ -106,10 +104,6 @@ func (f *MockScopeFactory) NewNetworkClient() (clients.NetworkClient, error) {
 
 func (f *MockScopeFactory) NewLbClient() (clients.LbClient, error) {
 	return f.LbClient, nil
-}
-
-func (f *MockScopeFactory) Logger() logr.Logger {
-	return f.logger
 }
 
 func (f *MockScopeFactory) ProjectID() string {

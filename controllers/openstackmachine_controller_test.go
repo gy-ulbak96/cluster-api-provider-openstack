@@ -17,14 +17,16 @@ limitations under the License.
 package controllers
 
 import (
+	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/pointer"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha8"
+	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/compute"
 )
 
@@ -56,8 +58,8 @@ func getDefaultOpenStackCluster() *infrav1.OpenStackCluster {
 					{ID: subnetUUID},
 				},
 			},
-			ControlPlaneSecurityGroup: &infrav1.SecurityGroup{ID: controlPlaneSecurityGroupUUID},
-			WorkerSecurityGroup:       &infrav1.SecurityGroup{ID: workerSecurityGroupUUID},
+			ControlPlaneSecurityGroup: &infrav1.SecurityGroupStatus{ID: controlPlaneSecurityGroupUUID},
+			WorkerSecurityGroup:       &infrav1.SecurityGroupStatus{ID: workerSecurityGroupUUID},
 		},
 	}
 }
@@ -81,20 +83,19 @@ func getDefaultOpenStackMachine() *infrav1.OpenStackMachine {
 			// InstanceID is set by the controller
 			// FloatingIP is only used by the cluster controller for the Bastion
 			// TODO: Test Networks, Ports, Subnet, and Trunk separately
-			CloudName:  "test-cloud",
 			Flavor:     flavorName,
-			Image:      infrav1.ImageFilter{ID: imageUUID},
+			Image:      infrav1.ImageParam{ID: pointer.String(imageUUID)},
 			SSHKeyName: sshKeyName,
 			Tags:       []string{"test-tag"},
-			ServerMetadata: map[string]string{
-				"test-metadata": "test-value",
+			ServerMetadata: []infrav1.ServerMetadata{
+				{Key: "test-metadata", Value: "test-value"},
 			},
 			ConfigDrive:    pointer.Bool(true),
-			SecurityGroups: []infrav1.SecurityGroupFilter{},
+			SecurityGroups: []infrav1.SecurityGroupParam{},
 			ServerGroup:    &infrav1.ServerGroupFilter{ID: serverGroupUUID},
 		},
 		Status: infrav1.OpenStackMachineStatus{
-			ReferencedResources: infrav1.ReferencedMachineResources{
+			Resolved: &infrav1.ResolvedMachineSpec{
 				ImageID:       imageUUID,
 				ServerGroupID: serverGroupUUID,
 			},
@@ -112,11 +113,10 @@ func getDefaultInstanceSpec() *compute.InstanceSpec {
 		Metadata: map[string]string{
 			"test-metadata": "test-value",
 		},
-		ConfigDrive:    *pointer.Bool(true),
-		FailureDomain:  *pointer.String(failureDomain),
-		ServerGroupID:  serverGroupUUID,
-		SecurityGroups: []infrav1.SecurityGroupFilter{},
-		Tags:           []string{"test-tag"},
+		ConfigDrive:   *pointer.Bool(true),
+		FailureDomain: *pointer.String(failureDomain),
+		ServerGroupID: serverGroupUUID,
+		Tags:          []string{"test-tag"},
 	}
 }
 
@@ -136,102 +136,6 @@ func Test_machineToInstanceSpec(t *testing.T) {
 			machine:          getDefaultMachine,
 			openStackMachine: getDefaultOpenStackMachine,
 			wantInstanceSpec: getDefaultInstanceSpec,
-		},
-		{
-			name: "Control plane security group",
-			openStackCluster: func() *infrav1.OpenStackCluster {
-				c := getDefaultOpenStackCluster()
-				c.Spec.ManagedSecurityGroups = true
-				return c
-			},
-			machine: func() *clusterv1.Machine {
-				m := getDefaultMachine()
-				m.Labels = map[string]string{
-					clusterv1.MachineControlPlaneLabel: "true",
-				}
-				return m
-			},
-			openStackMachine: getDefaultOpenStackMachine,
-			wantInstanceSpec: func() *compute.InstanceSpec {
-				i := getDefaultInstanceSpec()
-				i.SecurityGroups = []infrav1.SecurityGroupFilter{{ID: controlPlaneSecurityGroupUUID}}
-				return i
-			},
-		},
-		{
-			name: "Worker security group",
-			openStackCluster: func() *infrav1.OpenStackCluster {
-				c := getDefaultOpenStackCluster()
-				c.Spec.ManagedSecurityGroups = true
-				return c
-			},
-			machine:          getDefaultMachine,
-			openStackMachine: getDefaultOpenStackMachine,
-			wantInstanceSpec: func() *compute.InstanceSpec {
-				i := getDefaultInstanceSpec()
-				i.SecurityGroups = []infrav1.SecurityGroupFilter{{ID: workerSecurityGroupUUID}}
-				return i
-			},
-		},
-		{
-			name: "Control plane security group not applied to worker",
-			openStackCluster: func() *infrav1.OpenStackCluster {
-				c := getDefaultOpenStackCluster()
-				c.Spec.ManagedSecurityGroups = true
-				c.Status.WorkerSecurityGroup = nil
-				return c
-			},
-			machine:          getDefaultMachine,
-			openStackMachine: getDefaultOpenStackMachine,
-			wantInstanceSpec: func() *compute.InstanceSpec {
-				i := getDefaultInstanceSpec()
-				i.SecurityGroups = []infrav1.SecurityGroupFilter{}
-				return i
-			},
-		},
-		{
-			name: "Worker security group not applied to control plane",
-			openStackCluster: func() *infrav1.OpenStackCluster {
-				c := getDefaultOpenStackCluster()
-				c.Spec.ManagedSecurityGroups = true
-				c.Status.ControlPlaneSecurityGroup = nil
-				return c
-			},
-			machine: func() *clusterv1.Machine {
-				m := getDefaultMachine()
-				m.Labels = map[string]string{
-					clusterv1.MachineControlPlaneLabel: "true",
-				}
-				return m
-			},
-			openStackMachine: getDefaultOpenStackMachine,
-			wantInstanceSpec: func() *compute.InstanceSpec {
-				i := getDefaultInstanceSpec()
-				i.SecurityGroups = []infrav1.SecurityGroupFilter{}
-				return i
-			},
-		},
-		{
-			name: "Extra security group",
-			openStackCluster: func() *infrav1.OpenStackCluster {
-				c := getDefaultOpenStackCluster()
-				c.Spec.ManagedSecurityGroups = true
-				return c
-			},
-			machine: getDefaultMachine,
-			openStackMachine: func() *infrav1.OpenStackMachine {
-				m := getDefaultOpenStackMachine()
-				m.Spec.SecurityGroups = []infrav1.SecurityGroupFilter{{ID: extraSecurityGroupUUID}}
-				return m
-			},
-			wantInstanceSpec: func() *compute.InstanceSpec {
-				i := getDefaultInstanceSpec()
-				i.SecurityGroups = []infrav1.SecurityGroupFilter{
-					{ID: extraSecurityGroupUUID},
-					{ID: workerSecurityGroupUUID},
-				}
-				return i
-			},
 		},
 		{
 			name: "Tags",
@@ -255,8 +159,50 @@ func Test_machineToInstanceSpec(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := machineToInstanceSpec(tt.openStackCluster(), tt.machine(), tt.openStackMachine(), "user-data")
-			Expect(got).To(Equal(tt.wantInstanceSpec()))
+			g := NewWithT(t)
+			got, _ := machineToInstanceSpec(tt.openStackCluster(), tt.machine(), tt.openStackMachine(), "user-data")
+			wanted := tt.wantInstanceSpec()
+
+			g.Expect(got).To(Equal(wanted), cmp.Diff(got, wanted))
+		})
+	}
+}
+
+func TestGetPortIDs(t *testing.T) {
+	tests := []struct {
+		name  string
+		ports []infrav1.PortStatus
+		want  []string
+	}{
+		{
+			name:  "Empty ports",
+			ports: []infrav1.PortStatus{},
+			want:  []string{},
+		},
+		{
+			name: "Single port",
+			ports: []infrav1.PortStatus{
+				{ID: "port1"},
+			},
+			want: []string{"port1"},
+		},
+		{
+			name: "Multiple ports",
+			ports: []infrav1.PortStatus{
+				{ID: "port1"},
+				{ID: "port2"},
+				{ID: "port3"},
+			},
+			want: []string{"port1", "port2", "port3"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetPortIDs(tt.ports)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetPortIDs() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

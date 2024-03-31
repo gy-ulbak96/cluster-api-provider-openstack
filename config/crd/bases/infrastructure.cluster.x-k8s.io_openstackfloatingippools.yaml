@@ -41,51 +41,107 @@ spec:
             description: OpenStackFloatingIPPoolSpec defines the desired state of
               OpenStackFloatingIPPool.
             properties:
-              cloudName:
-                description: The name of the cloud to use from the clouds secret
-                type: string
               floatingIPNetwork:
                 description: FloatingIPNetwork is the external network to use for
                   floating ips, if there's only one external network it will be used
                   by default
+                maxProperties: 1
+                minProperties: 1
                 properties:
-                  description:
-                    type: string
+                  filter:
+                    description: Filter specifies a filter to select an OpenStack
+                      network. If provided, cannot be empty.
+                    minProperties: 1
+                    properties:
+                      description:
+                        type: string
+                      name:
+                        type: string
+                      notTags:
+                        description: |-
+                          NotTags is a list of tags to filter by. If specified, resources which
+                          contain all of the given tags will be excluded from the result.
+                        items:
+                          description: |-
+                            NeutronTag represents a tag on a Neutron resource.
+                            It may not be empty and may not contain commas.
+                          minLength: 1
+                          pattern: ^[^,]+$
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: set
+                      notTagsAny:
+                        description: |-
+                          NotTagsAny is a list of tags to filter by. If specified, resources
+                          which contain any of the given tags will be excluded from the result.
+                        items:
+                          description: |-
+                            NeutronTag represents a tag on a Neutron resource.
+                            It may not be empty and may not contain commas.
+                          minLength: 1
+                          pattern: ^[^,]+$
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: set
+                      projectID:
+                        type: string
+                      tags:
+                        description: |-
+                          Tags is a list of tags to filter by. If specified, the resource must
+                          have all of the tags specified to be included in the result.
+                        items:
+                          description: |-
+                            NeutronTag represents a tag on a Neutron resource.
+                            It may not be empty and may not contain commas.
+                          minLength: 1
+                          pattern: ^[^,]+$
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: set
+                      tagsAny:
+                        description: |-
+                          TagsAny is a list of tags to filter by. If specified, the resource
+                          must have at least one of the tags specified to be included in the
+                          result.
+                        items:
+                          description: |-
+                            NeutronTag represents a tag on a Neutron resource.
+                            It may not be empty and may not contain commas.
+                          minLength: 1
+                          pattern: ^[^,]+$
+                          type: string
+                        type: array
+                        x-kubernetes-list-type: set
+                    type: object
                   id:
-                    type: string
-                  name:
-                    type: string
-                  notTags:
-                    type: string
-                  notTagsAny:
-                    type: string
-                  projectId:
-                    type: string
-                  tags:
-                    type: string
-                  tagsAny:
+                    description: ID is the ID of the network to use. If ID is provided,
+                      the other filters cannot be provided. Must be in UUID format.
+                    format: uuid
                     type: string
                 type: object
               identityRef:
                 description: IdentityRef is a reference to a identity to be used when
                   reconciling this pool.
                 properties:
-                  kind:
-                    description: |-
-                      Kind of the identity. Must be supported by the infrastructure
-                      provider and may be either cluster or namespace-scoped.
-                    minLength: 1
+                  cloudName:
+                    description: CloudName specifies the name of the entry in the
+                      clouds.yaml file to use.
                     type: string
                   name:
                     description: |-
-                      Name of the infrastructure identity to be used.
-                      Must be either a cluster-scoped resource, or namespaced-scoped
-                      resource the same namespace as the resource(s) being provisioned.
+                      Name is the name of a secret in the same namespace as the resource being provisioned.
+                      The secret must contain a key named `clouds.yaml` which contains an OpenStack clouds.yaml file.
+                      The secret may optionally contain a key named `cacert` containing a PEM-encoded CA certificate.
                     type: string
                 required:
-                - kind
+                - cloudName
                 - name
                 type: object
+              maxIPs:
+                description: |-
+                  MaxIPs is the maximum number of floating ips that can be allocated from this pool, if nil there is no limit.
+                  If set, the pool will stop allocating floating ips when it reaches this number of ClaimedIPs.
+                type: integer
               preAllocatedFloatingIPs:
                 description: |-
                   PreAllocatedFloatingIPs is a list of floating IPs precreated in OpenStack that should be used by this pool.
@@ -100,6 +156,8 @@ spec:
                 - Retain
                 - Delete
                 type: string
+            required:
+            - identityRef
             type: object
           status:
             description: OpenStackFloatingIPPoolStatus defines the observed state
