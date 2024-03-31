@@ -111,6 +111,18 @@ func (r *OpenStackCluster) ValidateUpdate(oldRaw runtime.Object) (admission.Warn
 		r.Spec.APIServerFixedIP = ""
 	}
 
+	// //testtesttest
+	// // Allow change ControlPlaneEndpoint and APIServerFixedIP
+	// if old.Spec.ControlPlaneEndpoint.Host != "" {
+	// 	old.Spec.ControlPlaneEndpoint = clusterv1.APIEndpoint{}
+	// 	r.Spec.ControlPlaneEndpoint = clusterv1.APIEndpoint{}
+	// }
+
+	// if old.Spec.DisableAPIServerFloatingIP && old.Spec.APIServerFixedIP != "" {
+	// 	r.Spec.APIServerFixedIP = ""
+	// }
+	// //testtesttest
+
 	// If API Server floating IP is disabled, allow the change of the API Server port only for the first time.
 	if old.Spec.DisableAPIServerFloatingIP && old.Spec.APIServerPort == 0 && r.Spec.APIServerPort > 0 {
 		r.Spec.APIServerPort = 0

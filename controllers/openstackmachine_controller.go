@@ -439,6 +439,16 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 		return ctrl.Result{}, err
 	}
 	//testtesttest
+	// //testtesttest2
+	// if len(openStackCluster.Status.AvailableServerIPs) != 0 {
+	// 	log.Printf("######THE FOURTH STATE%v", openStackCluster.Status.AvailableServerIPs)
+	// 	openStackCluster.Spec.ControlPlaneEndpoint.Host = openStackCluster.Status.AvailableServerIPs[0]
+	// 	if err := r.Client.Update(ctx, openStackCluster); err != nil {
+	// 		log.Printf("Error Occured when update AvailableServerIp of OpenstackCluster %v", err)
+	// 		return ctrl.Result{}, err
+	// 	}
+	// }
+	// //testtesttest2
 
 	switch instanceStatus.State() {
 	case infrav1.InstanceStateActive:

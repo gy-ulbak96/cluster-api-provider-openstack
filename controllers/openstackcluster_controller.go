@@ -638,11 +638,18 @@ func reconcileNetworkComponents(scope scope.Scope, cluster *clusterv1.Cluster, o
 		case openStackCluster.Spec.APIServerFixedIP != "":
 			// If a fixed IP was specified, assume that the user is providing the extra configuration
 			// to use that IP as the VIP for the API server, e.g. using keepalived or kube-vip
-			// host = openStackCluster.Spec.APIServerFixedIP
+			host = openStackCluster.Spec.APIServerFixedIP
 
-			//testtesttest
-			host = openStackCluster.Status.AvailableServerIPs[0]
-			//testtesttest
+			// //testtesttest
+			// log.Printf("######THE FIRST STATE%v", openStackCluster.Status.AvailableServerIPs)
+			// if len(openStackCluster.Status.AvailableServerIPs) == 0 {
+			// 	log.Printf("######THE SECOND STATE%v", openStackCluster.Status.AvailableServerIPs)
+			// 	host = openStackCluster.Spec.APIServerFixedIP
+			// } else {
+			// 	log.Printf("######THE THIRD STATE%v", openStackCluster.Status.AvailableServerIPs)
+			// 	host = openStackCluster.Status.AvailableServerIPs[0]
+			// }
+			// //testtesttest
 		default:
 			// For now, we do not provide a managed VIP without either a load balancer or a floating IP
 			// In the future, we could manage a VIP port on the cluster network and set allowedAddressPairs
