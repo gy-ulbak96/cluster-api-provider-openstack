@@ -864,6 +864,7 @@ func autoConvert_v1alpha7_OpenStackClusterStatus_To_v1alpha6_OpenStackClusterSta
 	}
 	out.FailureReason = (*errors.ClusterStatusError)(unsafe.Pointer(in.FailureReason))
 	out.FailureMessage = (*string)(unsafe.Pointer(in.FailureMessage))
+	// WARNING: in.AvailableServerIPs requires manual conversion: does not exist in peer-type
 	return nil
 }
 

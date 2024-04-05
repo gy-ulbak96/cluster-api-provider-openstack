@@ -48,11 +48,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7"
+	// infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7"
+	infrav1 "github.com/gy-ulbak96/cluster-api-provider-openstack/api/v1alpha7"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/compute"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/loadbalancer"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/networking"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
+
+	//testtesttest
+	"log"
+	"encoding/json"
+	"slices"
+	//testtesttest
 )
 
 // OpenStackMachineReconciler reconciles a OpenStackMachine object.
@@ -147,7 +154,7 @@ func (r *OpenStackMachineReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Handle deleted machines
 	if !openStackMachine.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(scope, cluster, infraCluster, machine, openStackMachine)
+		return r.reconcileDelete(ctx, scope, cluster, infraCluster, machine, openStackMachine)
 	}
 
 	// Handle non-deleted clusters
@@ -218,7 +225,7 @@ func (r *OpenStackMachineReconciler) SetupWithManager(ctx context.Context, mgr c
 		Complete(r)
 }
 
-func (r *OpenStackMachineReconciler) reconcileDelete(scope scope.Scope, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster, machine *clusterv1.Machine, openStackMachine *infrav1.OpenStackMachine) (ctrl.Result, error) { //nolint:unparam
+func (r *OpenStackMachineReconciler) reconcileDelete(ctx context.Context, scope scope.Scope, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster, machine *clusterv1.Machine, openStackMachine *infrav1.OpenStackMachine) (ctrl.Result, error) { //nolint:unparam
 	scope.Logger().Info("Reconciling Machine delete")
 
 	clusterName := fmt.Sprintf("%s-%s", cluster.ObjectMeta.Namespace, cluster.Name)
@@ -262,7 +269,34 @@ func (r *OpenStackMachineReconciler) reconcileDelete(scope scope.Scope, cluster 
 			}
 
 			addresses := instanceNS.Addresses()
+
+			//testtesttest
+			log.Printf("DELETE ADDRESSES%v, %T", addresses, addresses)
+			//testtesttest
+
 			for _, address := range addresses {
+				
+				//testtesttest
+				adrbyte, err := json.Marshal(address)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("address marshal error occured: %w", err)
+				}
+				log.Printf("MMMARSSSHAL DEEEELLLETEEEEE ADDRESSSSES%v", string(adrbyte))
+				adrmap := make(map[string]string)
+				if err := json.Unmarshal(adrbyte, &adrmap); err != nil {
+					return ctrl.Result{}, fmt.Errorf("address unmarshal error occured: %w", err)
+				}	
+	
+				if adrmap["type"] == "InternalIP"{
+					log.Printf("loook at the IP %v, %T", adrmap["address"], adrmap["address"])
+					if slices.Contains(openStackCluster.Status.AvailableServerIPs, adrmap["address"]){
+						index := slices.Index(openStackCluster.Status.AvailableServerIPs, adrmap["address"])
+						openStackCluster.Status.AvailableServerIPs = slices.Delete(openStackCluster.Status.AvailableServerIPs, index, index+1)	
+						log.Printf("ADDRESS DELETED CHECK THE OPENSTACK CLUTER")
+					}
+				}
+				//testtesttest
+
 				if address.Type == corev1.NodeExternalIP {
 					if err = networkingService.DeleteFloatingIP(openStackMachine, address.Address); err != nil {
 						conditions.MarkFalse(openStackMachine, infrav1.APIServerIngressReadyCondition, infrav1.FloatingIPErrorReason, clusterv1.ConditionSeverityError, "Deleting floating IP failed: %v", err)
@@ -272,6 +306,13 @@ func (r *OpenStackMachineReconciler) reconcileDelete(scope scope.Scope, cluster 
 			}
 		}
 	}
+
+	//testtesttest
+	if err := r.Client.Status().Update(ctx, openStackCluster); err != nil {
+		log.Printf("Error Occured when update AvailableServerIp of OpenstackCluster %v", err)
+		return ctrl.Result{}, err
+	}				
+	//testtesttest
 
 	instanceSpec := machineToInstanceSpec(openStackCluster, machine, openStackMachine, "")
 
@@ -357,6 +398,39 @@ func (r *OpenStackMachineReconciler) reconcileNormal(ctx context.Context, scope 
 		Address: instanceStatus.Name(),
 	})
 	openStackMachine.Status.Addresses = addresses
+
+	//testtesttest
+	if util.IsControlPlaneMachine(machine) {
+		var AvailableServerIPs []string
+		for _, adr := range addresses {
+			adrbyte, err := json.Marshal(adr)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("address marshal error occured: %w", err)
+			}
+
+			adrmap := make(map[string]string)
+			if err := json.Unmarshal(adrbyte, &adrmap); err != nil {
+				return ctrl.Result{}, fmt.Errorf("address unmarshal error occured: %w", err)
+			}	
+
+			if adrmap["type"] == "InternalIP"{
+				log.Printf("loook at the IP %v, %T", adrmap["address"], adrmap["address"])
+				AvailableServerIPs = append(AvailableServerIPs,adrmap["address"])			
+			}
+		}
+
+		for _, availableServerIP := range AvailableServerIPs {
+			if !slices.Contains(openStackCluster.Status.AvailableServerIPs, availableServerIP) {
+				openStackCluster.Status.AvailableServerIPs = append(openStackCluster.Status.AvailableServerIPs,availableServerIP)
+			}
+		}
+	}
+
+	if err := r.Client.Status().Update(ctx, openStackCluster); err != nil {
+		log.Printf("Error Occured when update AvailableServerIp of OpenstackCluster %v", err)
+		return ctrl.Result{}, err
+	}
+	//testtesttest
 
 	switch instanceStatus.State() {
 	case infrav1.InstanceStateActive:
