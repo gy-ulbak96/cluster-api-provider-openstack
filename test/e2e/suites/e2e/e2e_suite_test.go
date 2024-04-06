@@ -28,7 +28,7 @@ import (
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"sigs.k8s.io/cluster-api-provider-openstack/test/e2e/shared"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/test/e2e/shared"
 )
 
 var e2eCtx *shared.E2EContext

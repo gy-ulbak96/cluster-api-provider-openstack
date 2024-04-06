@@ -23,9 +23,9 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/attributestags"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/clients"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/record"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/clients"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/record"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/scope"
 )
 
 const (

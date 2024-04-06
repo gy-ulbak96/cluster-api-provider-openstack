@@ -19,9 +19,9 @@ package compute
 import (
 	"fmt"
 
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/clients"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/cloud/services/networking"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/clients"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/cloud/services/networking"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/scope"
 )
 
 type Service struct {

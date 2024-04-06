@@ -24,10 +24,10 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/record"
-	capoerrors "sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/errors"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/names"
+	infrav1 "github.com/gy-ulbak96/cluster-api-provider-openstack/api/v1alpha7"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/record"
+	capoerrors "github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/utils/errors"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/utils/names"
 )
 
 func (s *Service) ReconcileRouter(openStackCluster *infrav1.OpenStackCluster, clusterName string) error {

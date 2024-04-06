@@ -33,7 +33,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
 	"github.com/gophercloud/utils/openstack/clientconfig"
 
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/metrics"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/metrics"
 )
 
 type NetworkClient interface {

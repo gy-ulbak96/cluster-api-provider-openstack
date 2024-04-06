@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	capi_e2e "sigs.k8s.io/cluster-api/test/e2e"
 
-	"sigs.k8s.io/cluster-api-provider-openstack/test/e2e/shared"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/test/e2e/shared"
 )
 
 const OldCAPIVersion = "v1.4.6"

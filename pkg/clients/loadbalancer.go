@@ -29,8 +29,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/providers"
 	"github.com/gophercloud/utils/openstack/clientconfig"
 
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/metrics"
-	capoerrors "sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/errors"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/metrics"
+	capoerrors "github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/utils/errors"
 )
 
 type LbClient interface {

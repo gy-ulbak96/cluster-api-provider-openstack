@@ -42,14 +42,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	infrav1alpha5 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha5"
-	infrav1alpha6 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha6"
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7"
-	"sigs.k8s.io/cluster-api-provider-openstack/controllers"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/metrics"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/record"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/scope"
-	"sigs.k8s.io/cluster-api-provider-openstack/version"
+	infrav1alpha5 "github.com/gy-ulbak96/cluster-api-provider-openstack/api/v1alpha5"
+	infrav1alpha6 "github.com/gy-ulbak96/cluster-api-provider-openstack/api/v1alpha6"
+	infrav1 "github.com/gy-ulbak96/cluster-api-provider-openstack/api/v1alpha7"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/controllers"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/metrics"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/record"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/scope"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/version"
 )
 
 var (

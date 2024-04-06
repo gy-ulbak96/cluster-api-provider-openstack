@@ -23,8 +23,8 @@ import (
 	apiconversion "k8s.io/apimachinery/pkg/conversion"
 	ctrlconversion "sigs.k8s.io/controller-runtime/pkg/conversion"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/conversion"
+	infrav1 "github.com/gy-ulbak96/cluster-api-provider-openstack/api/v1alpha7"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/utils/conversion"
 )
 
 const trueString = "true"

@@ -24,10 +24,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/metrics"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/record"
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/names"
+	infrav1 "github.com/gy-ulbak96/cluster-api-provider-openstack/api/v1alpha7"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/metrics"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/record"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/utils/names"
 )
 
 func (s *Service) GetOrCreateFloatingIP(eventObject runtime.Object, openStackCluster *infrav1.OpenStackCluster, clusterName, ip string) (*floatingips.FloatingIP, error) {

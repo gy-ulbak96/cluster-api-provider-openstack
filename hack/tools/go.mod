@@ -1,4 +1,4 @@
-module sigs.k8s.io/cluster-api-provider-openstack/hack/tools
+module github.com/gy-ulbak96/cluster-api-provider-openstack/hack/tools
 
 go 1.19
 

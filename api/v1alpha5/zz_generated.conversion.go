@@ -27,7 +27,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
-	v1alpha7 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7"
+	v1alpha7 "github.com/gy-ulbak96/cluster-api-provider-openstack/api/v1alpha7"
 	v1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	errors "sigs.k8s.io/cluster-api/errors"
 )
@@ -1313,7 +1313,7 @@ func autoConvert_v1alpha5_PortOpts_To_v1alpha7_PortOpts(in *PortOpts, out *v1alp
 	out.Trunk = (*bool)(unsafe.Pointer(in.Trunk))
 	out.HostID = in.HostID
 	out.VNICType = in.VNICType
-	// WARNING: in.Profile requires manual conversion: inconvertible types (map[string]string vs sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7.BindingProfile)
+	// WARNING: in.Profile requires manual conversion: inconvertible types (map[string]string vs github.com/gy-ulbak96/cluster-api-provider-openstackapi/v1alpha7.BindingProfile)
 	out.DisablePortSecurity = (*bool)(unsafe.Pointer(in.DisablePortSecurity))
 	out.Tags = *(*[]string)(unsafe.Pointer(&in.Tags))
 	return nil
@@ -1341,7 +1341,7 @@ func autoConvert_v1alpha7_PortOpts_To_v1alpha5_PortOpts(in *v1alpha7.PortOpts, o
 	out.Trunk = (*bool)(unsafe.Pointer(in.Trunk))
 	out.HostID = in.HostID
 	out.VNICType = in.VNICType
-	// WARNING: in.Profile requires manual conversion: inconvertible types (sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7.BindingProfile vs map[string]string)
+	// WARNING: in.Profile requires manual conversion: inconvertible types (github.com/gy-ulbak96/cluster-api-provider-openstack/api/v1alpha7.BindingProfile vs map[string]string)
 	out.DisablePortSecurity = (*bool)(unsafe.Pointer(in.DisablePortSecurity))
 	// WARNING: in.PropagateUplinkStatus requires manual conversion: does not exist in peer-type
 	out.Tags = *(*[]string)(unsafe.Pointer(&in.Tags))

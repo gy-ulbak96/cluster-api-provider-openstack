@@ -28,7 +28,7 @@ import (
 	"github.com/gophercloud/utils/openstack/clientconfig"
 	uflavors "github.com/gophercloud/utils/openstack/compute/v2/flavors"
 
-	"sigs.k8s.io/cluster-api-provider-openstack/pkg/metrics"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/pkg/metrics"
 )
 
 /*

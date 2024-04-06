@@ -26,7 +26,7 @@ import (
 	"k8s.io/utils/pointer"
 	capi_e2e "sigs.k8s.io/cluster-api/test/e2e"
 
-	"sigs.k8s.io/cluster-api-provider-openstack/test/e2e/shared"
+	"github.com/gy-ulbak96/cluster-api-provider-openstack/test/e2e/shared"
 )
 
 var _ = Describe("When testing unhealthy machines remediation", func() {

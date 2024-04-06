@@ -29,8 +29,8 @@ import (
 	utilconversion "sigs.k8s.io/cluster-api/util/conversion"
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 
-	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7"
-	testhelpers "sigs.k8s.io/cluster-api-provider-openstack/test/helpers"
+	infrav1 "github.com/gy-ulbak96/cluster-api-provider-openstack/api/v1alpha7"
+	testhelpers "github.com/gy-ulbak96/cluster-api-provider-openstack/test/helpers"
 )
 
 // Setting this to false to avoid running tests in parallel. Only for use in development.
