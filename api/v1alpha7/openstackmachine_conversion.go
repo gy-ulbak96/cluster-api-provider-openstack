@@ -66,6 +66,19 @@ var v1alpha7OpenStackMachineRestorer = conversion.RestorerFor[*OpenStackMachine]
 			return &c.Spec
 		},
 		restorev1alpha7MachineSpec,
+		conversion.HashedFilterField[*OpenStackMachine, OpenStackMachineSpec](func(s *OpenStackMachineSpec) *OpenStackMachineSpec {
+			// Despite being spec fields, ProviderID and InstanceID
+			// are both set by the machine controller. If these are
+			// the only changes to the spec, we still want to
+			// restore the rest of the spec to its original state.
+			if s.ProviderID != nil || s.InstanceID != nil {
+				f := *s
+				f.ProviderID = nil
+				f.InstanceID = nil
+				return &f
+			}
+			return s
+		}),
 	),
 }
 
@@ -87,6 +100,28 @@ var v1beta1OpenStackMachineRestorer = conversion.RestorerFor[*infrav1.OpenStackM
 			return &c.Status.Resolved
 		},
 	),
+}
+
+/* OpenStackMachine */
+
+func Convert_v1alpha7_OpenStackMachine_To_v1beta1_OpenStackMachine(in *OpenStackMachine, out *infrav1.OpenStackMachine, s apiconversion.Scope) error {
+	err := autoConvert_v1alpha7_OpenStackMachine_To_v1beta1_OpenStackMachine(in, out, s)
+	if err != nil {
+		return err
+	}
+
+	out.Status.InstanceID = in.Spec.InstanceID
+	return nil
+}
+
+func Convert_v1beta1_OpenStackMachine_To_v1alpha7_OpenStackMachine(in *infrav1.OpenStackMachine, out *OpenStackMachine, s apiconversion.Scope) error {
+	err := autoConvert_v1beta1_OpenStackMachine_To_v1alpha7_OpenStackMachine(in, out, s)
+	if err != nil {
+		return err
+	}
+
+	out.Spec.InstanceID = in.Status.InstanceID
+	return nil
 }
 
 /* OpenStackMachineSpec */
@@ -156,6 +191,22 @@ func restorev1beta1MachineSpec(previous *infrav1.OpenStackMachineSpec, dst *infr
 		}
 	}
 	dst.FloatingIPPoolRef = previous.FloatingIPPoolRef
+
+	if dst.RootVolume != nil && previous.RootVolume != nil {
+		restorev1beta1BlockDeviceVolume(
+			&previous.RootVolume.BlockDeviceVolume,
+			&dst.RootVolume.BlockDeviceVolume,
+		)
+	}
+
+	if len(dst.AdditionalBlockDevices) == len(previous.AdditionalBlockDevices) {
+		for i := range dst.AdditionalBlockDevices {
+			restorev1beta1BlockDeviceVolume(
+				previous.AdditionalBlockDevices[i].Storage.Volume,
+				dst.AdditionalBlockDevices[i].Storage.Volume,
+			)
+		}
+	}
 }
 
 func Convert_v1alpha7_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(in *OpenStackMachineSpec, out *infrav1.OpenStackMachineSpec, s apiconversion.Scope) error {
@@ -165,7 +216,7 @@ func Convert_v1alpha7_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(in *O
 	}
 
 	if in.ServerGroupID != "" {
-		out.ServerGroup = &infrav1.ServerGroupFilter{ID: in.ServerGroupID}
+		out.ServerGroup = &infrav1.ServerGroupParam{ID: &in.ServerGroupID}
 	} else {
 		out.ServerGroup = nil
 	}
@@ -211,8 +262,8 @@ func Convert_v1beta1_OpenStackMachineSpec_To_v1alpha7_OpenStackMachineSpec(in *i
 		return err
 	}
 
-	if in.ServerGroup != nil {
-		out.ServerGroupID = in.ServerGroup.ID
+	if in.ServerGroup != nil && in.ServerGroup.ID != nil {
+		out.ServerGroupID = *in.ServerGroup.ID
 	}
 
 	if in.Image.ID != nil {

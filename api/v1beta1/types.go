@@ -17,7 +17,7 @@ limitations under the License.
 package v1beta1
 
 import (
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/optional"
 )
@@ -490,9 +490,12 @@ type BastionStatus struct {
 }
 
 type RootVolume struct {
-	Size             int    `json:"diskSize,omitempty"`
-	VolumeType       string `json:"volumeType,omitempty"`
-	AvailabilityZone string `json:"availabilityZone,omitempty"`
+	// SizeGiB is the size of the block device in gibibytes (GiB).
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum:=1
+	SizeGiB int `json:"sizeGiB"`
+
+	BlockDeviceVolume `json:",inline"`
 }
 
 // BlockDeviceStorage is the storage type of a block device to create and
@@ -520,13 +523,44 @@ type BlockDeviceVolume struct {
 	// +optional
 	Type string `json:"type,omitempty"`
 
-	// AvailabilityZone is the volume availability zone to create the volume in.
-	// If omitted, the availability zone of the server will be used.
-	// The availability zone must NOT contain spaces otherwise it will lead to volume that belongs
-	// to this availability zone register failure, see kubernetes/cloud-provider-openstack#1379 for
-	// further information.
+	// AvailabilityZone is the volume availability zone to create the volume
+	// in. If not specified, the volume will be created without an explicit
+	// availability zone.
 	// +optional
-	AvailabilityZone string `json:"availabilityZone,omitempty"`
+	AvailabilityZone *VolumeAvailabilityZone `json:"availabilityZone,omitempty"`
+}
+
+// VolumeAZSource specifies where to obtain the availability zone for a volume.
+// +kubebuilder:validation:Enum=Name;Machine
+type VolumeAZSource string
+
+const (
+	VolumeAZFromName    VolumeAZSource = "Name"
+	VolumeAZFromMachine VolumeAZSource = "Machine"
+)
+
+// VolumeAZName is the name of a volume availability zone. It may not contain spaces.
+// +kubebuilder:validation:Pattern:="^[^ ]+$"
+// +kubebuilder:validation:MinLength:=1
+type VolumeAZName string
+
+// VolumeAvailabilityZone specifies the availability zone for a volume.
+// +kubebuilder:validation:XValidation:rule="!has(self.from) || self.from == 'Name' ? has(self.name) : !has(self.name)",message="name is required when from is 'Name' or default"
+type VolumeAvailabilityZone struct {
+	// From specifies where we will obtain the availability zone for the
+	// volume. The options are "Name" and "Machine". If "Name" is specified
+	// then the Name field must also be specified. If "Machine" is specified
+	// the volume will use the value of FailureDomain, if any, from the
+	// associated Machine.
+	// +kubebuilder:default:=Name
+	// +optional
+	From VolumeAZSource `json:"from,omitempty"`
+
+	// Name is the name of a volume availability zone to use. It is required
+	// if From is "Name". The volume availability zone name may not contain
+	// spaces.
+	// +optional
+	Name *VolumeAZName `json:"name,omitempty"`
 }
 
 // AdditionalBlockDevice is a block device to attach to the server.
@@ -537,9 +571,13 @@ type AdditionalBlockDevice struct {
 	// Also, this name will be used for tagging the block device.
 	// Information about the block device tag can be obtained from the OpenStack
 	// metadata API or the config drive.
+	// Name cannot be 'root', which is reserved for the root volume.
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
 	// SizeGiB is the size of the block device in gibibytes (GiB).
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum:=1
 	SizeGiB int `json:"sizeGiB"`
 
 	// Storage specifies the storage type of the block device and
@@ -547,9 +585,30 @@ type AdditionalBlockDevice struct {
 	Storage BlockDeviceStorage `json:"storage"`
 }
 
+// ServerGroupParam specifies an OpenStack server group. It may be specified by ID or filter, but not both.
+// +kubebuilder:validation:MaxProperties:=1
+// +kubebuilder:validation:MinProperties:=1
+type ServerGroupParam struct {
+	// ID is the ID of the server group to use.
+	// +kubebuilder:validation:Format:=uuid
+	ID optional.String `json:"id,omitempty"`
+
+	// Filter specifies a query to select an OpenStack server group. If provided, it cannot be empty.
+	Filter *ServerGroupFilter `json:"filter,omitempty"`
+}
+
+// ServerGroupFilter specifies a query to select an OpenStack server group. At least one property must be set.
+// +kubebuilder:validation:MinProperties:=1
 type ServerGroupFilter struct {
-	ID   string `json:"id,omitempty"`
-	Name string `json:"name,omitempty"`
+	// Name is the name of a server group to look for.
+	Name optional.String `json:"name,omitempty"`
+}
+
+func (f *ServerGroupFilter) IsZero() bool {
+	if f == nil {
+		return true
+	}
+	return f.Name == nil
 }
 
 // BlockDeviceType defines the type of block device to create.
@@ -611,6 +670,12 @@ type LoadBalancer struct {
 	AllowedCIDRs []string `json:"allowedCIDRs,omitempty"`
 	//+optional
 	Tags []string `json:"tags,omitempty"`
+	// LoadBalancerNetwork contains information about network and/or subnets which the
+	// loadbalancer is allocated on.
+	// If subnets are specified within the LoadBalancerNetwork currently only the first
+	// subnet in the list is taken into account.
+	// +optional
+	LoadBalancerNetwork *NetworkStatusWithSubnets `json:"loadBalancerNetwork,omitempty"`
 }
 
 // SecurityGroupStatus represents the basic information of the associated
@@ -719,12 +784,18 @@ var (
 )
 
 // Bastion represents basic information about the bastion node. If you enable bastion, the spec has to be specified.
-// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.spec)",message="you need to specify the spec if bastion is enabled"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || has(self.spec)",message="spec is required if bastion is enabled"
 type Bastion struct {
-	// Enabled means that bastion is enabled. Defaults to false.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:default:=false
-	Enabled bool `json:"enabled"`
+	// Enabled means that bastion is enabled. The bastion is enabled by
+	// default if this field is not specified. Set this field to false to disable the
+	// bastion.
+	//
+	// It is not currently possible to remove the bastion from the cluster
+	// spec without first disabling it by setting this field to false and
+	// waiting until the bastion has been deleted.
+	// +kubebuilder:default:=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Spec for the bastion itself
 	Spec *OpenStackMachineSpec `json:"spec,omitempty"`
@@ -739,6 +810,13 @@ type Bastion struct {
 	//+optional
 	//+kubebuilder:validation:Format:=ipv4
 	FloatingIP optional.String `json:"floatingIP,omitempty"`
+}
+
+func (b *Bastion) IsEnabled() bool {
+	if b == nil {
+		return false
+	}
+	return b.Enabled == nil || *b.Enabled
 }
 
 type APIServerLoadBalancer struct {
@@ -768,10 +846,30 @@ type APIServerLoadBalancer struct {
 	// specified.
 	// +optional
 	Provider optional.String `json:"provider,omitempty"`
+
+	// Network defines which network should the load balancer be allocated on.
+	//+optional
+	Network *NetworkParam `json:"network,omitempty"`
+
+	// Subnets define which subnets should the load balancer be allocated on.
+	// It is expected that subnets are located on the network specified in this resource.
+	// Only the first element is taken into account.
+	// +optional
+	// +listType=atomic
+	// kubebuilder:validation:MaxLength:=2
+	Subnets []SubnetParam `json:"subnets,omitempty"`
+
+	// AvailabilityZone is the failure domain that will be used to create the APIServerLoadBalancer Spec.
+	//+optional
+	AvailabilityZone optional.String `json:"availabilityZone,omitempty"`
+
+	// Flavor is the flavor name that will be used to create the APIServerLoadBalancer Spec.
+	//+optional
+	Flavor optional.String `json:"flavor,omitempty"`
 }
 
 func (s *APIServerLoadBalancer) IsZero() bool {
-	return s == nil || ((s.Enabled == nil || !*s.Enabled) && len(s.AdditionalPorts) == 0 && len(s.AllowedCIDRs) == 0 && pointer.StringDeref(s.Provider, "") == "")
+	return s == nil || ((s.Enabled == nil || !*s.Enabled) && len(s.AdditionalPorts) == 0 && len(s.AllowedCIDRs) == 0 && ptr.Deref(s.Provider, "") == "")
 }
 
 func (s *APIServerLoadBalancer) IsEnabled() bool {

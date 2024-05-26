@@ -46,7 +46,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	infrav1alpha1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha1"
-	infrav1alpha5 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha5"
 	infrav1alpha6 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha6"
 	infrav1alpha7 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7"
 	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
@@ -105,7 +104,6 @@ func init() {
 	_ = clusterv1.AddToScheme(scheme)
 	_ = ipamv1.AddToScheme(scheme)
 	_ = infrav1.AddToScheme(scheme)
-	_ = infrav1alpha5.AddToScheme(scheme)
 	_ = infrav1alpha6.AddToScheme(scheme)
 	_ = infrav1alpha7.AddToScheme(scheme)
 	_ = infrav1alpha1.AddToScheme(scheme)
@@ -233,6 +231,7 @@ func main() {
 	cfg, err := config.GetConfigWithContext(os.Getenv("KUBECONTEXT"))
 	if err != nil {
 		setupLog.Error(err, "unable to get kubeconfig")
+		os.Exit(1)
 	}
 	cfg.QPS = restConfigQPS
 	cfg.Burst = restConfigBurst
@@ -372,14 +371,19 @@ func concurrency(c int) controller.Options {
 func GetTLSOptionOverrideFuncs(options TLSOptions) ([]func(*tls.Config), error) {
 	var tlsOptions []func(config *tls.Config)
 
-	tlsMinVersion, err := GetTLSVersion(options.TLSMinVersion)
-	if err != nil {
-		return nil, err
-	}
-
-	tlsMaxVersion, err := GetTLSVersion(options.TLSMaxVersion)
-	if err != nil {
-		return nil, err
+	// To make a static analyzer happy, this block ensures there is no code
+	// path that sets a TLS version outside the acceptable values, even in
+	// case of unexpected user input.
+	var tlsMinVersion, tlsMaxVersion uint16
+	for version, option := range map[*uint16]string{&tlsMinVersion: options.TLSMinVersion, &tlsMaxVersion: options.TLSMaxVersion} {
+		switch option {
+		case TLSVersion12:
+			*version = tls.VersionTLS12
+		case TLSVersion13:
+			*version = tls.VersionTLS13
+		default:
+			return nil, fmt.Errorf("unexpected TLS version %q (must be one of: %s)", option, strings.Join(tlsSupportedVersions, ", "))
+		}
 	}
 
 	if tlsMaxVersion != 0 && tlsMinVersion > tlsMaxVersion {
@@ -420,19 +424,4 @@ func GetTLSOptionOverrideFuncs(options TLSOptions) ([]func(*tls.Config), error) 
 	}
 
 	return tlsOptions, nil
-}
-
-// GetTLSVersion returns the corresponding tls.Version or error.
-func GetTLSVersion(version string) (uint16, error) {
-	var v uint16
-
-	switch version {
-	case TLSVersion12:
-		v = tls.VersionTLS12
-	case TLSVersion13:
-		v = tls.VersionTLS13
-	default:
-		return 0, fmt.Errorf("unexpected TLS version %q (must be one of: %s)", version, strings.Join(tlsSupportedVersions, ", "))
-	}
-	return v, nil
 }

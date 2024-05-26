@@ -102,6 +102,26 @@ var v1beta1OpenStackMachineRestorer = conversion.RestorerFor[*infrav1.OpenStackM
 	),
 }
 
+/* OpenStackMachine */
+
+func Convert_v1alpha6_OpenStackMachine_To_v1beta1_OpenStackMachine(in *OpenStackMachine, out *infrav1.OpenStackMachine, s apiconversion.Scope) error {
+	err := autoConvert_v1alpha6_OpenStackMachine_To_v1beta1_OpenStackMachine(in, out, s)
+	if err != nil {
+		return err
+	}
+	out.Status.InstanceID = in.Spec.InstanceID
+	return nil
+}
+
+func Convert_v1beta1_OpenStackMachine_To_v1alpha6_OpenStackMachine(in *infrav1.OpenStackMachine, out *OpenStackMachine, s apiconversion.Scope) error {
+	err := autoConvert_v1beta1_OpenStackMachine_To_v1alpha6_OpenStackMachine(in, out, s)
+	if err != nil {
+		return err
+	}
+	out.Spec.InstanceID = in.Status.InstanceID
+	return nil
+}
+
 /* OpenStackMachineSpec */
 
 func restorev1alpha6MachineSpec(previous *OpenStackMachineSpec, dst *OpenStackMachineSpec) {
@@ -174,6 +194,22 @@ func restorev1beta1MachineSpec(previous *infrav1.OpenStackMachineSpec, dst *infr
 	if len(dst.SecurityGroups) == len(previous.SecurityGroups) {
 		for i := range dst.SecurityGroups {
 			restorev1beta1SecurityGroupParam(&previous.SecurityGroups[i], &dst.SecurityGroups[i])
+		}
+	}
+
+	if dst.RootVolume != nil && previous.RootVolume != nil {
+		restorev1beta1BlockDeviceVolume(
+			&previous.RootVolume.BlockDeviceVolume,
+			&dst.RootVolume.BlockDeviceVolume,
+		)
+	}
+
+	if len(dst.AdditionalBlockDevices) == len(previous.AdditionalBlockDevices) {
+		for i := range dst.AdditionalBlockDevices {
+			restorev1beta1BlockDeviceVolume(
+				previous.AdditionalBlockDevices[i].Storage.Volume,
+				dst.AdditionalBlockDevices[i].Storage.Volume,
+			)
 		}
 	}
 }
@@ -267,7 +303,7 @@ func Convert_v1alpha6_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(in *O
 	}
 
 	if in.ServerGroupID != "" {
-		out.ServerGroup = &infrav1.ServerGroupFilter{ID: in.ServerGroupID}
+		out.ServerGroup = &infrav1.ServerGroupParam{ID: &in.ServerGroupID}
 	} else {
 		out.ServerGroup = nil
 	}
@@ -316,8 +352,8 @@ func Convert_v1beta1_OpenStackMachineSpec_To_v1alpha6_OpenStackMachineSpec(in *i
 		return err
 	}
 
-	if in.ServerGroup != nil {
-		out.ServerGroupID = in.ServerGroup.ID
+	if in.ServerGroup != nil && in.ServerGroup.ID != nil {
+		out.ServerGroupID = *in.ServerGroup.ID
 	}
 
 	if in.Image.ID != nil {

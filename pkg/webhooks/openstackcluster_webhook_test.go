@@ -20,15 +20,13 @@ import (
 	"context"
 	"testing"
 
-	. "github.com/onsi/gomega"
-	"k8s.io/utils/pointer"
+	. "github.com/onsi/gomega" //nolint:revive
+	"k8s.io/utils/ptr"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 )
 
 func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
-	g := NewWithT(t)
-
 	tests := []struct {
 		name        string
 		oldTemplate *infrav1.OpenStackCluster
@@ -87,12 +85,12 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Spec: &infrav1.OpenStackMachineSpec{
 							Image: infrav1.ImageParam{
 								Filter: &infrav1.ImageFilter{
-									Name: pointer.String("foobar"),
+									Name: ptr.To("foobar"),
 								},
 							},
 							Flavor: "minimal",
 						},
-						Enabled: true,
+						Enabled: ptr.To(true),
 					},
 				},
 				Status: infrav1.OpenStackClusterStatus{
@@ -111,12 +109,12 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Spec: &infrav1.OpenStackMachineSpec{
 							Image: infrav1.ImageParam{
 								Filter: &infrav1.ImageFilter{
-									Name: pointer.String("foobarbaz"),
+									Name: ptr.To("foobarbaz"),
 								},
 							},
 							Flavor: "medium",
 						},
-						Enabled: true,
+						Enabled: ptr.To(true),
 					},
 				},
 			},
@@ -134,10 +132,10 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						AllNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
 							{
 								Name:                "foobar",
-								Description:         pointer.String("foobar"),
-								PortRangeMin:        pointer.Int(80),
-								PortRangeMax:        pointer.Int(80),
-								Protocol:            pointer.String("tcp"),
+								Description:         ptr.To("foobar"),
+								PortRangeMin:        ptr.To(80),
+								PortRangeMax:        ptr.To(80),
+								Protocol:            ptr.To("tcp"),
 								RemoteManagedGroups: []infrav1.ManagedSecurityGroupName{"controlplane"},
 							},
 						},
@@ -154,10 +152,10 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						AllNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
 							{
 								Name:                "foobar",
-								Description:         pointer.String("foobar"),
-								PortRangeMin:        pointer.Int(80),
-								PortRangeMax:        pointer.Int(80),
-								Protocol:            pointer.String("tcp"),
+								Description:         ptr.To("foobar"),
+								PortRangeMin:        ptr.To(80),
+								PortRangeMax:        ptr.To(80),
+								Protocol:            ptr.To("tcp"),
 								RemoteManagedGroups: []infrav1.ManagedSecurityGroupName{"controlplane", "worker"},
 							},
 						},
@@ -175,7 +173,7 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						CloudName: "foobar",
 					},
 					APIServerLoadBalancer: &infrav1.APIServerLoadBalancer{
-						Enabled: pointer.Bool(true),
+						Enabled: ptr.To(true),
 						AllowedCIDRs: []string{
 							"0.0.0.0/0",
 							"192.168.10.0/24",
@@ -190,7 +188,7 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						CloudName: "foobar",
 					},
 					APIServerLoadBalancer: &infrav1.APIServerLoadBalancer{
-						Enabled: pointer.Bool(true),
+						Enabled: ptr.To(true),
 						AllowedCIDRs: []string{
 							"0.0.0.0/0",
 							"192.168.10.0/24",
@@ -294,7 +292,7 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Name:      "foobar",
 						CloudName: "foobar",
 					},
-					ControlPlaneOmitAvailabilityZone: pointer.Bool(true),
+					ControlPlaneOmitAvailabilityZone: ptr.To(true),
 				},
 			},
 			wantErr: false,
@@ -307,7 +305,7 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Name:      "foobar",
 						CloudName: "foobar",
 					},
-					DisableAPIServerFloatingIP: pointer.Bool(true),
+					DisableAPIServerFloatingIP: ptr.To(true),
 				},
 			},
 			newTemplate: &infrav1.OpenStackCluster{
@@ -316,8 +314,8 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Name:      "foobar",
 						CloudName: "foobar",
 					},
-					DisableAPIServerFloatingIP: pointer.Bool(true),
-					APIServerFixedIP:           pointer.String("20.1.56.1"),
+					DisableAPIServerFloatingIP: ptr.To(true),
+					APIServerFixedIP:           ptr.To("20.1.56.1"),
 				},
 			},
 			wantErr: false,
@@ -330,7 +328,7 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Name:      "foobar",
 						CloudName: "foobar",
 					},
-					DisableAPIServerFloatingIP: pointer.Bool(false),
+					DisableAPIServerFloatingIP: ptr.To(false),
 				},
 			},
 			newTemplate: &infrav1.OpenStackCluster{
@@ -339,8 +337,8 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Name:      "foobar",
 						CloudName: "foobar",
 					},
-					DisableAPIServerFloatingIP: pointer.Bool(false),
-					APIServerFixedIP:           pointer.String("20.1.56.1"),
+					DisableAPIServerFloatingIP: ptr.To(false),
+					APIServerFixedIP:           ptr.To("20.1.56.1"),
 				},
 			},
 			wantErr: true,
@@ -354,13 +352,13 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Name:      "foobar",
 						CloudName: "foobar",
 					},
-					DisableAPIServerFloatingIP: pointer.Bool(true),
+					DisableAPIServerFloatingIP: ptr.To(true),
 				},
 			},
 			newTemplate: &infrav1.OpenStackCluster{
 				Spec: infrav1.OpenStackClusterSpec{
-					DisableAPIServerFloatingIP: pointer.Bool(true),
-					APIServerPort:              pointer.Int(8443),
+					DisableAPIServerFloatingIP: ptr.To(true),
+					APIServerPort:              ptr.To(8443),
 				},
 			},
 			wantErr: false,
@@ -373,7 +371,7 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Name:      "foobar",
 						CloudName: "foobar",
 					},
-					DisableAPIServerFloatingIP: pointer.Bool(false),
+					DisableAPIServerFloatingIP: ptr.To(false),
 				},
 			},
 			newTemplate: &infrav1.OpenStackCluster{
@@ -382,8 +380,8 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Name:      "foobar",
 						CloudName: "foobar",
 					},
-					DisableAPIServerFloatingIP: pointer.Bool(false),
-					APIServerPort:              pointer.Int(8443),
+					DisableAPIServerFloatingIP: ptr.To(false),
+					APIServerPort:              ptr.To(8443),
 				},
 			},
 			wantErr: true,
@@ -409,7 +407,7 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Name:      "foobar",
 						CloudName: "foobar",
 					},
-					APIServerFloatingIP: pointer.String("1.2.3.4"),
+					APIServerFloatingIP: ptr.To("1.2.3.4"),
 				},
 				Status: infrav1.OpenStackClusterStatus{
 					APIServerLoadBalancer: &infrav1.LoadBalancer{
@@ -440,7 +438,7 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						Name:      "foobar",
 						CloudName: "foobar",
 					},
-					APIServerFloatingIP: pointer.String("5.6.7.8"),
+					APIServerFloatingIP: ptr.To("5.6.7.8"),
 				},
 				Status: infrav1.OpenStackClusterStatus{
 					APIServerLoadBalancer: &infrav1.LoadBalancer{
@@ -459,12 +457,12 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						CloudName: "foobar",
 					},
 					Bastion: &infrav1.Bastion{
-						Enabled: true,
+						Enabled: ptr.To(true),
 						Spec: &infrav1.OpenStackMachineSpec{
 							Flavor: "m1.small",
 							Image: infrav1.ImageParam{
 								Filter: &infrav1.ImageFilter{
-									Name: pointer.String("ubuntu"),
+									Name: ptr.To("ubuntu"),
 								},
 							},
 						},
@@ -490,12 +488,12 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 						CloudName: "foobar",
 					},
 					Bastion: &infrav1.Bastion{
-						Enabled: false,
+						Enabled: ptr.To(false),
 						Spec: &infrav1.OpenStackMachineSpec{
 							Flavor: "m1.small",
 							Image: infrav1.ImageParam{
 								Filter: &infrav1.ImageFilter{
-									Name: pointer.String("ubuntu"),
+									Name: ptr.To("ubuntu"),
 								},
 							},
 						},
@@ -515,7 +513,9 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 			ctx := context.TODO()
+
 			webhook := &openStackClusterWebhook{}
 			warn, err := webhook.ValidateUpdate(ctx, tt.oldTemplate, tt.newTemplate)
 			if tt.wantErr {
@@ -530,8 +530,6 @@ func TestOpenStackCluster_ValidateUpdate(t *testing.T) {
 }
 
 func TestOpenStackCluster_ValidateCreate(t *testing.T) {
-	g := NewWithT(t)
-
 	tests := []struct {
 		name     string
 		template *infrav1.OpenStackCluster
@@ -561,10 +559,10 @@ func TestOpenStackCluster_ValidateCreate(t *testing.T) {
 						AllNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
 							{
 								Name:         "foobar",
-								Description:  pointer.String("foobar"),
-								PortRangeMin: pointer.Int(80),
-								PortRangeMax: pointer.Int(80),
-								Protocol:     pointer.String("tcp"),
+								Description:  ptr.To("foobar"),
+								PortRangeMin: ptr.To(80),
+								PortRangeMax: ptr.To(80),
+								Protocol:     ptr.To("tcp"),
 							},
 						},
 					},
@@ -584,12 +582,12 @@ func TestOpenStackCluster_ValidateCreate(t *testing.T) {
 						AllNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
 							{
 								Name:                "foobar",
-								Description:         pointer.String("foobar"),
-								PortRangeMin:        pointer.Int(80),
-								PortRangeMax:        pointer.Int(80),
-								Protocol:            pointer.String("tcp"),
+								Description:         ptr.To("foobar"),
+								PortRangeMin:        ptr.To(80),
+								PortRangeMax:        ptr.To(80),
+								Protocol:            ptr.To("tcp"),
 								RemoteManagedGroups: []infrav1.ManagedSecurityGroupName{"controlplane"},
-								RemoteGroupID:       pointer.String("foobar"),
+								RemoteGroupID:       ptr.To("foobar"),
 							},
 						},
 					},
@@ -600,7 +598,9 @@ func TestOpenStackCluster_ValidateCreate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
 			ctx := context.TODO()
+
 			webhook := &openStackClusterWebhook{}
 			warn, err := webhook.ValidateCreate(ctx, tt.template)
 			if tt.wantErr {

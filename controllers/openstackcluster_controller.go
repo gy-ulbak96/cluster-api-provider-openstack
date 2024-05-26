@@ -29,7 +29,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	capierrors "sigs.k8s.io/cluster-api/errors"
 	"sigs.k8s.io/cluster-api/util"
@@ -219,7 +219,7 @@ func contains(arr []string, target string) bool {
 
 func resolveBastionResources(scope *scope.WithLogger, clusterResourceName string, openStackCluster *infrav1.OpenStackCluster) (bool, error) {
 	// Resolve and store resources for the bastion
-	if openStackCluster.Spec.Bastion != nil && openStackCluster.Spec.Bastion.Enabled {
+	if openStackCluster.Spec.Bastion.IsEnabled() {
 		if openStackCluster.Status.Bastion == nil {
 			openStackCluster.Status.Bastion = &infrav1.BastionStatus{}
 		}
@@ -290,7 +290,16 @@ func deleteBastion(scope *scope.WithLogger, cluster *clusterv1.Cluster, openStac
 		}
 	}
 
-	if instanceStatus != nil {
+	// If no instance was created we currently need to check for orphaned
+	// volumes.
+	if instanceStatus == nil {
+		bastion := openStackCluster.Spec.Bastion
+		if bastion != nil && bastion.Spec != nil {
+			if err := computeService.DeleteVolumes(bastionName(cluster.Name), bastion.Spec.RootVolume, bastion.Spec.AdditionalBlockDevices); err != nil {
+				return fmt.Errorf("delete volumes: %w", err)
+			}
+		}
+	} else {
 		instanceNS, err := instanceStatus.NetworkStatus()
 		if err != nil {
 			return err
@@ -307,11 +316,7 @@ func deleteBastion(scope *scope.WithLogger, cluster *clusterv1.Cluster, openStac
 			}
 		}
 
-		instanceSpec, err := bastionToInstanceSpec(openStackCluster, cluster)
-		if err != nil {
-			return err
-		}
-		if err = computeService.DeleteInstance(openStackCluster, instanceStatus, instanceSpec); err != nil {
+		if err = computeService.DeleteInstance(openStackCluster, instanceStatus); err != nil {
 			handleUpdateOSCError(openStackCluster, fmt.Errorf("failed to delete bastion: %w", err))
 			return fmt.Errorf("failed to delete bastion: %w", err)
 		}
@@ -375,7 +380,7 @@ func reconcileNormal(scope *scope.WithLogger, cluster *clusterv1.Cluster, openSt
 	openStackCluster.Status.FailureDomains = make(clusterv1.FailureDomains)
 	for _, az := range availabilityZones {
 		// By default, the AZ is used or not used for control plane nodes depending on the flag
-		found := !pointer.BoolDeref(openStackCluster.Spec.ControlPlaneOmitAvailabilityZone, false)
+		found := !ptr.Deref(openStackCluster.Spec.ControlPlaneOmitAvailabilityZone, false)
 		// If explicit AZs for control plane nodes are given, they override the value
 		if len(openStackCluster.Spec.ControlPlaneAvailabilityZones) > 0 {
 			found = contains(openStackCluster.Spec.ControlPlaneAvailabilityZones, az.ZoneName)
@@ -406,7 +411,7 @@ func reconcileBastion(scope *scope.WithLogger, cluster *clusterv1.Cluster, openS
 	}
 
 	// No Bastion defined
-	if openStackCluster.Spec.Bastion == nil || !openStackCluster.Spec.Bastion.Enabled {
+	if !openStackCluster.Spec.Bastion.IsEnabled() {
 		// Delete any existing bastion
 		if openStackCluster.Status.Bastion != nil {
 			if err := deleteBastion(scope, cluster, openStackCluster); err != nil {
@@ -440,6 +445,8 @@ func reconcileBastion(scope *scope.WithLogger, cluster *clusterv1.Cluster, openS
 		return nil, fmt.Errorf("failed computing bastion hash from instance spec: %w", err)
 	}
 	if bastionHashHasChanged(bastionHash, openStackCluster.ObjectMeta.Annotations) {
+		scope.Logger().Info("Bastion instance spec has changed, deleting existing bastion")
+
 		if err := deleteBastion(scope, cluster, openStackCluster); err != nil {
 			return nil, err
 		}
@@ -544,7 +551,7 @@ func bastionAddFloatingIP(openStackCluster *infrav1.OpenStackCluster, clusterRes
 func bastionToInstanceSpec(openStackCluster *infrav1.OpenStackCluster, cluster *clusterv1.Cluster) (*compute.InstanceSpec, error) {
 	bastion := openStackCluster.Spec.Bastion
 	if bastion == nil {
-		return nil, fmt.Errorf("bastion spec is nil")
+		bastion = &infrav1.Bastion{}
 	}
 	if bastion.Spec == nil {
 		// For the case when Bastion is deleted but we don't have spec, let's use an empty one.
@@ -617,6 +624,57 @@ func bastionHashHasChanged(computeHash string, clusterAnnotations map[string]str
 	return latestHash != computeHash
 }
 
+func resolveLoadBalancerNetwork(openStackCluster *infrav1.OpenStackCluster, networkingService *networking.Service) error {
+	lbSpec := openStackCluster.Spec.APIServerLoadBalancer
+	if lbSpec.IsEnabled() {
+		lbStatus := openStackCluster.Status.APIServerLoadBalancer
+		if lbStatus == nil {
+			lbStatus = &infrav1.LoadBalancer{}
+			openStackCluster.Status.APIServerLoadBalancer = lbStatus
+		}
+
+		lbNetStatus := lbStatus.LoadBalancerNetwork
+		if lbNetStatus == nil {
+			lbNetStatus = &infrav1.NetworkStatusWithSubnets{
+				NetworkStatus: infrav1.NetworkStatus{},
+			}
+		}
+
+		if lbSpec.Network != nil {
+			lbNet, err := networkingService.GetNetworkByParam(lbSpec.Network)
+			if err != nil {
+				handleUpdateOSCError(openStackCluster, fmt.Errorf("failed to find loadbalancer network: %w", err))
+				return fmt.Errorf("failed to find network: %w", err)
+			}
+
+			lbNetStatus.Name = lbNet.Name
+			lbNetStatus.ID = lbNet.ID
+			lbNetStatus.Tags = lbNet.Tags
+
+			// Filter out only relevant subnets specified by the spec
+			lbNetStatus.Subnets = []infrav1.Subnet{}
+			for _, s := range lbSpec.Subnets {
+				matchFound := false
+				for _, subnetID := range lbNet.Subnets {
+					if s.ID != nil && subnetID == *s.ID {
+						matchFound = true
+						lbNetStatus.Subnets = append(
+							lbNetStatus.Subnets, infrav1.Subnet{
+								ID: *s.ID,
+							})
+					}
+				}
+				if !matchFound {
+					handleUpdateOSCError(openStackCluster, fmt.Errorf("no subnet match was found in the specified network (specified subnet: %v, available subnets: %v)", s, lbNet.Subnets))
+					return fmt.Errorf("no subnet match was found in the specified network (specified subnet: %v, available subnets: %v)", s, lbNet.Subnets)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 func reconcileNetworkComponents(scope *scope.WithLogger, cluster *clusterv1.Cluster, openStackCluster *infrav1.OpenStackCluster) error {
 	clusterResourceName := names.ClusterResourceName(cluster)
 
@@ -643,6 +701,12 @@ func reconcileNetworkComponents(scope *scope.WithLogger, cluster *clusterv1.Clus
 		}
 	} else {
 		return fmt.Errorf("failed to reconcile network: ManagedSubnets only supports one element, %d provided", len(openStackCluster.Spec.ManagedSubnets))
+	}
+
+	err = resolveLoadBalancerNetwork(openStackCluster, networkingService)
+	if err != nil {
+		handleUpdateOSCError(openStackCluster, fmt.Errorf("failed to reconcile loadbalancer network: %w", err))
+		return fmt.Errorf("failed to reconcile loadbalancer network: %w", err)
 	}
 
 	err = networkingService.ReconcileSecurityGroups(openStackCluster, clusterResourceName)
@@ -772,7 +836,7 @@ func reconcileControlPlaneEndpoint(scope *scope.WithLogger, networkingService *n
 
 	// API server load balancer is disabled, but floating IP is not. Create
 	// a floating IP to be attached directly to a control plane host.
-	case !pointer.BoolDeref(openStackCluster.Spec.DisableAPIServerFloatingIP, false):
+	case !ptr.Deref(openStackCluster.Spec.DisableAPIServerFloatingIP, false):
 		fp, err := networkingService.GetOrCreateFloatingIP(openStackCluster, openStackCluster, clusterResourceName, openStackCluster.Spec.APIServerFloatingIP)
 		if err != nil {
 			handleUpdateOSCError(openStackCluster, fmt.Errorf("floating IP cannot be got or created: %w", err))
@@ -850,7 +914,7 @@ func (r *OpenStackClusterReconciler) SetupWithManager(ctx context.Context, mgr c
 func handleUpdateOSCError(openstackCluster *infrav1.OpenStackCluster, message error) {
 	err := capierrors.UpdateClusterError
 	openstackCluster.Status.FailureReason = &err
-	openstackCluster.Status.FailureMessage = pointer.String(message.Error())
+	openstackCluster.Status.FailureMessage = ptr.To(message.Error())
 }
 
 // getClusterSubnets retrieves the subnets based on the Subnet filters specified on OpenstackCluster.

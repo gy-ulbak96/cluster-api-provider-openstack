@@ -47,7 +47,7 @@ func (s *Service) ReconcileSecurityGroups(openStackCluster *infrav1.OpenStackClu
 		return nil
 	}
 
-	bastionEnabled := openStackCluster.Spec.Bastion != nil && openStackCluster.Spec.Bastion.Enabled
+	bastionEnabled := openStackCluster.Spec.Bastion.IsEnabled()
 
 	secControlPlaneGroupName := getSecControlPlaneGroupName(clusterResourceName)
 	secWorkerGroupName := getSecWorkerGroupName(clusterResourceName)
@@ -212,7 +212,7 @@ func (s *Service) generateDesiredSecGroups(openStackCluster *infrav1.OpenStackCl
 
 	desiredSecGroupsBySuffix := make(map[string]securityGroupSpec)
 
-	if openStackCluster.Spec.Bastion != nil && openStackCluster.Spec.Bastion.Enabled {
+	if openStackCluster.Spec.Bastion.IsEnabled() {
 		controlPlaneRules = append(controlPlaneRules, getSGControlPlaneSSH(secBastionGroupID)...)
 		workerRules = append(workerRules, getSGWorkerSSH(secBastionGroupID)...)
 
@@ -297,10 +297,6 @@ func getAllNodesRules(remoteManagedGroups map[string]string, allNodesSecurityGro
 
 // validateRemoteManagedGroups validates that the remoteManagedGroups target existing managed security groups.
 func validateRemoteManagedGroups(remoteManagedGroups map[string]string, ruleRemoteManagedGroups []infrav1.ManagedSecurityGroupName) error {
-	if len(ruleRemoteManagedGroups) == 0 {
-		return fmt.Errorf("remoteManagedGroups is required")
-	}
-
 	for _, group := range ruleRemoteManagedGroups {
 		if _, ok := remoteManagedGroups[group.String()]; !ok {
 			return fmt.Errorf("remoteManagedGroups: %s is not a valid remote managed security group", group)
@@ -357,7 +353,7 @@ func (s *Service) DeleteSecurityGroups(openStackCluster *infrav1.OpenStackCluste
 		getSecWorkerGroupName(clusterResourceName),
 	}
 
-	if openStackCluster.Spec.Bastion != nil && openStackCluster.Spec.Bastion.Enabled {
+	if openStackCluster.Spec.Bastion.IsEnabled() {
 		secGroupNames = append(secGroupNames, getSecBastionGroupName(clusterResourceName))
 	}
 

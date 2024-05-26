@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ipamv1 "sigs.k8s.io/cluster-api/exp/ipam/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util/conditions"
@@ -168,7 +168,7 @@ func (r *OpenStackFloatingIPPoolReconciler) Reconcile(ctx context.Context, req c
 							Name: claim.Name,
 						},
 						PoolRef: corev1.TypedLocalObjectReference{
-							APIGroup: pointer.String(infrav1alpha1.GroupVersion.Group),
+							APIGroup: ptr.To(infrav1alpha1.GroupVersion.Group),
 							Kind:     pool.Kind,
 							Name:     pool.Name,
 						},
@@ -352,7 +352,7 @@ func (r *OpenStackFloatingIPPoolReconciler) getIP(ctx context.Context, scope *sc
 		}
 		pool.Status.FailedIPs = append(pool.Status.FailedIPs, ip)
 	}
-	maxIPs := pointer.IntDeref(pool.Spec.MaxIPs, -1)
+	maxIPs := ptr.Deref(pool.Spec.MaxIPs, -1)
 	// If we have reached the maximum number of IPs, we should not create more IPs
 	if maxIPs != -1 && len(pool.Status.ClaimedIPs) >= maxIPs {
 		scope.Logger().Info("MaxIPs reached", "pool", pool.Name)
@@ -369,7 +369,7 @@ func (r *OpenStackFloatingIPPoolReconciler) getIP(ctx context.Context, scope *sc
 	defer func() {
 		tag := pool.GetFloatingIPTag()
 
-		err := wait.ExponentialBackoffWithContext(ctx, backoff, func(ctx context.Context) (bool, error) {
+		err := wait.ExponentialBackoffWithContext(ctx, backoff, func(context.Context) (bool, error) {
 			if err := networkingService.TagFloatingIP(fp.FloatingIP, tag); err != nil {
 				scope.Logger().Error(err, "Failed to tag floating IP, retrying", "ip", fp.FloatingIP, "tag", tag)
 				return false, err
@@ -398,8 +398,19 @@ func (r *OpenStackFloatingIPPoolReconciler) reconcileFloatingIPNetwork(scope *sc
 		return err
 	}
 
-	network, err := networkingService.GetNetworkByParam(&pool.Spec.FloatingIPNetwork)
+	// If the pool does not have a network, we default to a external network if there's only one
+	var networkParam *infrav1.NetworkParam
+	if pool.Spec.FloatingIPNetwork == nil {
+		networkParam = &infrav1.NetworkParam{
+			Filter: &infrav1.NetworkFilter{},
+		}
+	} else {
+		networkParam = pool.Spec.FloatingIPNetwork
+	}
+
+	network, err := networkingService.GetNetworkByParam(networkParam, networking.ExternalNetworksOnly)
 	if err != nil {
+		conditions.MarkFalse(pool, infrav1alpha1.OpenstackFloatingIPPoolReadyCondition, infrav1alpha1.UnableToFindNetwork, clusterv1.ConditionSeverityError, "Failed to find network: %v", err)
 		return fmt.Errorf("failed to find network: %w", err)
 	}
 

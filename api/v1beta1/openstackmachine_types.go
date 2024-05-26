@@ -19,9 +19,11 @@ package v1beta1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/errors"
+
+	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/optional"
 )
 
 const (
@@ -35,9 +37,6 @@ const (
 type OpenStackMachineSpec struct {
 	// ProviderID is the unique identifier as specified by the cloud provider.
 	ProviderID *string `json:"providerID,omitempty"`
-
-	// InstanceID is the OpenStack instance ID for this machine.
-	InstanceID *string `json:"instanceID,omitempty"`
 
 	// The flavor reference for the flavor for your server instance.
 	Flavor string `json:"flavor"`
@@ -86,7 +85,7 @@ type OpenStackMachineSpec struct {
 
 	// The server group to assign the machine to.
 	// +optional
-	ServerGroup *ServerGroupFilter `json:"serverGroup,omitempty"`
+	ServerGroup *ServerGroupParam `json:"serverGroup,omitempty"`
 
 	// IdentityRef is a reference to a secret holding OpenStack credentials
 	// to be used when reconciling this machine. If not specified, the
@@ -118,6 +117,10 @@ type OpenStackMachineStatus struct {
 	// Ready is true when the provider resource is ready.
 	// +optional
 	Ready bool `json:"ready"`
+
+	// InstanceID is the OpenStack instance ID for this machine.
+	// +optional
+	InstanceID optional.String `json:"instanceID,omitempty"`
 
 	// Addresses contains the OpenStack instance associated addresses.
 	Addresses []corev1.NodeAddress `json:"addresses,omitempty"`
@@ -203,7 +206,7 @@ func (r *OpenStackMachine) SetConditions(conditions clusterv1.Conditions) {
 // SetFailure sets the OpenStackMachine status failure reason and failure message.
 func (r *OpenStackMachine) SetFailure(failureReason errors.MachineStatusError, failureMessage error) {
 	r.Status.FailureReason = &failureReason
-	r.Status.FailureMessage = pointer.String(failureMessage.Error())
+	r.Status.FailureMessage = ptr.To(failureMessage.Error())
 }
 
 func init() {

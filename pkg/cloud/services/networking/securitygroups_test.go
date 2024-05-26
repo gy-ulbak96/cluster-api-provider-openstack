@@ -21,13 +21,13 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/testr"
-	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/security/rules"
-	. "github.com/onsi/gomega"
-	"k8s.io/utils/pointer"
+	. "github.com/onsi/gomega" //nolint:revive
+	"go.uber.org/mock/gomock"
+	"k8s.io/utils/ptr"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/clients/mock"
@@ -49,19 +49,14 @@ func TestValidateRemoteManagedGroups(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "Valid rule with missing remoteManagedGroups",
+			name: "Valid rule with no remoteManagedGroups",
 			rule: infrav1.SecurityGroupRuleSpec{
-				PortRangeMin: pointer.Int(22),
-				PortRangeMax: pointer.Int(22),
-				Protocol:     pointer.String("tcp"),
+				PortRangeMin:   ptr.To(22),
+				PortRangeMax:   ptr.To(22),
+				Protocol:       ptr.To("tcp"),
+				RemoteIPPrefix: ptr.To("0.0.0.0/0"),
 			},
-			remoteManagedGroups: map[string]string{
-				"self":         "self",
-				"controlplane": "1",
-				"worker":       "2",
-				"bastion":      "3",
-			},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name: "Valid rule with remoteManagedGroups",
@@ -123,9 +118,9 @@ func TestGetAllNodesRules(t *testing.T) {
 			},
 			allNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
 				{
-					Protocol:     pointer.String("tcp"),
-					PortRangeMin: pointer.Int(22),
-					PortRangeMax: pointer.Int(22),
+					Protocol:     ptr.To("tcp"),
+					PortRangeMin: ptr.To(22),
+					PortRangeMax: ptr.To(22),
 					RemoteManagedGroups: []infrav1.ManagedSecurityGroupName{
 						"controlplane",
 						"worker",
@@ -156,9 +151,9 @@ func TestGetAllNodesRules(t *testing.T) {
 			},
 			allNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
 				{
-					Protocol:            pointer.String("tcp"),
-					PortRangeMin:        pointer.Int(22),
-					PortRangeMax:        pointer.Int(22),
+					Protocol:            ptr.To("tcp"),
+					PortRangeMin:        ptr.To(22),
+					PortRangeMax:        ptr.To(22),
 					RemoteManagedGroups: []infrav1.ManagedSecurityGroupName{"controlplane"},
 				},
 			},
@@ -172,6 +167,70 @@ func TestGetAllNodesRules(t *testing.T) {
 			},
 		},
 		{
+			name: "Valid remoteIPPrefix in a rule",
+			remoteManagedGroups: map[string]string{
+				"controlplane": "1",
+				"worker":       "2",
+			},
+			allNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
+				{
+					Protocol:       ptr.To("tcp"),
+					PortRangeMin:   ptr.To(22),
+					PortRangeMax:   ptr.To(22),
+					RemoteIPPrefix: ptr.To("0.0.0.0/0"),
+				},
+			},
+			wantRules: []resolvedSecurityGroupRuleSpec{
+				{
+					Protocol:       "tcp",
+					PortRangeMin:   22,
+					PortRangeMax:   22,
+					RemoteIPPrefix: "0.0.0.0/0",
+				},
+			},
+		},
+		{
+			name: "Valid allNodesSecurityGroupRules with no remote parameter",
+			remoteManagedGroups: map[string]string{
+				"controlplane": "1",
+				"worker":       "2",
+			},
+			allNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
+				{
+					Protocol:     ptr.To("tcp"),
+					PortRangeMin: ptr.To(22),
+					PortRangeMax: ptr.To(22),
+				},
+			},
+			wantRules: []resolvedSecurityGroupRuleSpec{
+				{
+					Protocol:     "tcp",
+					PortRangeMin: 22,
+					PortRangeMax: 22,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Invalid allNodesSecurityGroupRules with bastion while remoteManagedGroups does not have bastion",
+			remoteManagedGroups: map[string]string{
+				"controlplane": "1",
+				"worker":       "2",
+			},
+			allNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
+				{
+					Protocol:     ptr.To("tcp"),
+					PortRangeMin: ptr.To(22),
+					PortRangeMax: ptr.To(22),
+					RemoteManagedGroups: []infrav1.ManagedSecurityGroupName{
+						"bastion",
+					},
+				},
+			},
+			wantRules: nil,
+			wantErr:   true,
+		},
+		{
 			name: "Invalid allNodesSecurityGroupRules with wrong remoteManagedGroups",
 			remoteManagedGroups: map[string]string{
 				"controlplane": "1",
@@ -179,9 +238,9 @@ func TestGetAllNodesRules(t *testing.T) {
 			},
 			allNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
 				{
-					Protocol:     pointer.String("tcp"),
-					PortRangeMin: pointer.Int(22),
-					PortRangeMax: pointer.Int(22),
+					Protocol:     ptr.To("tcp"),
+					PortRangeMin: ptr.To(22),
+					PortRangeMax: ptr.To(22),
 					RemoteManagedGroups: []infrav1.ManagedSecurityGroupName{
 						"controlplanezzz",
 						"worker",
@@ -199,9 +258,9 @@ func TestGetAllNodesRules(t *testing.T) {
 			},
 			allNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
 				{
-					Protocol:     pointer.String("tcp"),
-					PortRangeMin: pointer.Int(22),
-					PortRangeMax: pointer.Int(22),
+					Protocol:     ptr.To("tcp"),
+					PortRangeMin: ptr.To(22),
+					PortRangeMax: ptr.To(22),
 					RemoteManagedGroups: []infrav1.ManagedSecurityGroupName{
 						"bastion",
 					},
@@ -274,9 +333,9 @@ func TestGenerateDesiredSecGroups(t *testing.T) {
 					ManagedSecurityGroups: &infrav1.ManagedSecurityGroups{
 						AllNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
 							{
-								Protocol:            pointer.String("tcp"),
-								PortRangeMin:        pointer.Int(22),
-								PortRangeMax:        pointer.Int(22),
+								Protocol:            ptr.To("tcp"),
+								PortRangeMin:        ptr.To(22),
+								PortRangeMax:        ptr.To(22),
 								RemoteManagedGroups: []infrav1.ManagedSecurityGroupName{"controlplane", "worker"},
 							},
 						},
@@ -293,9 +352,9 @@ func TestGenerateDesiredSecGroups(t *testing.T) {
 					ManagedSecurityGroups: &infrav1.ManagedSecurityGroups{
 						AllNodesSecurityGroupRules: []infrav1.SecurityGroupRuleSpec{
 							{
-								Protocol:            pointer.String("tcp"),
-								PortRangeMin:        pointer.Int(22),
-								PortRangeMax:        pointer.Int(22),
+								Protocol:            ptr.To("tcp"),
+								PortRangeMin:        ptr.To(22),
+								PortRangeMax:        ptr.To(22),
 								RemoteManagedGroups: []infrav1.ManagedSecurityGroupName{"controlplane", "worker", "unknownGroup"},
 							},
 						},
@@ -358,7 +417,7 @@ func TestReconcileGroupRules(t *testing.T) {
 				Name:  sgName,
 				Rules: []rules.SecGroupRule{},
 			},
-			mockExpect:   func(m *mock.MockNetworkClientMockRecorder) {},
+			mockExpect:   func(*mock.MockNetworkClientMockRecorder) {},
 			wantSGStatus: infrav1.SecurityGroupStatus{},
 		},
 		{
@@ -395,7 +454,7 @@ func TestReconcileGroupRules(t *testing.T) {
 					},
 				},
 			},
-			mockExpect: func(m *mock.MockNetworkClientMockRecorder) {},
+			mockExpect: func(*mock.MockNetworkClientMockRecorder) {},
 		},
 		{
 			name: "Different desiredSGSpec and observedSG produces changes",
@@ -533,7 +592,7 @@ func TestService_ReconcileSecurityGroups(t *testing.T) {
 			name: "Default control plane, worker, and bastion security groups",
 			openStackClusterSpec: infrav1.OpenStackClusterSpec{
 				Bastion: &infrav1.Bastion{
-					Enabled: true,
+					Enabled: ptr.To(true),
 				},
 				ManagedSecurityGroups: &infrav1.ManagedSecurityGroups{},
 			},

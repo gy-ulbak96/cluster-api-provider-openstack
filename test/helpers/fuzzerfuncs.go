@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	fuzz "github.com/google/gofuzz"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/optional"
@@ -30,7 +30,7 @@ func filterInvalidTags(tags []infrav1.NeutronTag) []infrav1.NeutronTag {
 	var ret []infrav1.NeutronTag
 	for i := range tags {
 		s := string(tags[i])
-		if len(s) > 0 && !strings.Contains(s, ",") {
+		if s != "" && !strings.Contains(s, ",") {
 			ret = append(ret, tags[i])
 		}
 	}
@@ -52,7 +52,7 @@ type isZeroer[T any] interface {
 
 func fuzzFilterParam[Z isZeroer[T], T any](id *optional.String, filter *Z, c fuzz.Continue) {
 	if c.RandBool() {
-		*id = pointer.String(nonEmptyString(c))
+		*id = ptr.To(nonEmptyString(c))
 		*filter = nil
 	} else {
 		*filter = new(T)
@@ -148,6 +148,40 @@ func InfraV1FuzzerFuncs() []interface{} {
 
 		func(param *infrav1.RouterParam, c fuzz.Continue) {
 			fuzzFilterParam(&param.ID, &param.Filter, c)
+		},
+
+		func(param *infrav1.SecurityGroupParam, c fuzz.Continue) {
+			fuzzFilterParam(&param.ID, &param.Filter, c)
+		},
+
+		// Ensure VolumeAZ type is valid
+		func(az *infrav1.VolumeAvailabilityZone, c fuzz.Continue) {
+			stringWithoutSpaces := func() string {
+				for {
+					s := c.RandString()
+					if !strings.Contains(s, " ") && s != "" {
+						return s
+					}
+				}
+			}
+
+			// From is defaulted
+			if c.RandBool() {
+				name := infrav1.VolumeAZName(stringWithoutSpaces())
+				az.Name = &name
+				return
+			}
+
+			// From is Name
+			if c.RandBool() {
+				az.From = infrav1.VolumeAZFromName
+				name := infrav1.VolumeAZName(stringWithoutSpaces())
+				az.Name = &name
+				return
+			}
+
+			// From is Machine
+			az.From = infrav1.VolumeAZFromMachine
 		},
 	}
 }

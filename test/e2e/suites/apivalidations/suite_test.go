@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -39,8 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	infrav1alpha1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha1"
-	infrav1alpha5 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha5"
-	infrav1alpha6 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha6"
 	infrav1alpha7 "sigs.k8s.io/cluster-api-provider-openstack/api/v1alpha7"
 	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/webhooks"
@@ -56,6 +55,10 @@ var (
 	mgrDone    chan struct{}
 )
 
+const (
+	clusterNamePrefix = "cluster-"
+)
+
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -63,12 +66,19 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
+	testScheme = scheme.Scheme
+	for _, f := range []func(*runtime.Scheme) error{
+		infrav1alpha1.AddToScheme,
+		infrav1alpha7.AddToScheme,
+		infrav1.AddToScheme,
+	} {
+		Expect(f(testScheme)).To(Succeed())
+	}
+
 	By("bootstrapping test environment")
+	testCRDs := filepath.Join("..", "..", "..", "..", "config", "crd", "bases")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths: []string{
-			// NOTE: These are the bare CRDs without conversion webhooks
-			filepath.Join("..", "..", "..", "..", "config", "crd", "bases"),
-		},
+		CRDDirectoryPaths:     []string{testCRDs},
 		ErrorIfCRDPathMissing: true,
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
 			Paths: []string{
@@ -85,17 +95,6 @@ var _ = BeforeSuite(func() {
 		By("tearing down the test environment")
 		return testEnv.Stop()
 	})
-
-	testScheme = scheme.Scheme
-	for _, f := range []func(*runtime.Scheme) error{
-		infrav1alpha1.AddToScheme,
-		infrav1alpha5.AddToScheme,
-		infrav1alpha6.AddToScheme,
-		infrav1alpha7.AddToScheme,
-		infrav1.AddToScheme,
-	} {
-		Expect(f(testScheme)).To(Succeed())
-	}
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: testScheme})
 	Expect(err).NotTo(HaveOccurred())
@@ -128,6 +127,7 @@ var _ = BeforeSuite(func() {
 			Host:    testEnv.WebhookInstallOptions.LocalServingHost,
 			CertDir: testEnv.WebhookInstallOptions.LocalServingCertDir,
 		}),
+		Logger: GinkgoLogr,
 	})
 	Expect(err).ToNot(HaveOccurred(), "Manager setup should succeed")
 	Expect(webhooks.RegisterAllWithManager(mgr)).To(BeEmpty(), "Failed to register webhooks")
@@ -145,7 +145,7 @@ var _ = BeforeSuite(func() {
 	DeferCleanup(func() {
 		By("Tearing down manager")
 		mgrCancel()
-		Eventually(mgrDone).Should(BeClosed(), "Manager should stop")
+		Eventually(mgrDone).WithTimeout(time.Second*5).Should(BeClosed(), "Manager should stop")
 	})
 })
 

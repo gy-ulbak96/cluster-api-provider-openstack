@@ -24,12 +24,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/portsbinding"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/portsecurity"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/record"
@@ -58,6 +59,19 @@ func (s *Service) GetPortFromInstanceIP(instanceID string, ip string) ([]ports.P
 	return s.client.ListPort(portOpts)
 }
 
+type PortListOpts struct {
+	DeviceOwner []string `q:"device_owner"`
+	NetworkID   string   `q:"network_id"`
+}
+
+func (p *PortListOpts) ToPortListQuery() (string, error) {
+	q, err := gophercloud.BuildQueryString(p)
+	if err != nil {
+		return "", err
+	}
+	return q.String(), nil
+}
+
 func (s *Service) GetPortForExternalNetwork(instanceID string, externalNetworkID string) (*ports.Port, error) {
 	instancePortsOpts := ports.ListOpts{
 		DeviceID: instanceID,
@@ -68,9 +82,9 @@ func (s *Service) GetPortForExternalNetwork(instanceID string, externalNetworkID
 	}
 
 	for _, instancePort := range instancePorts {
-		networkPortsOpts := ports.ListOpts{
+		networkPortsOpts := &PortListOpts{
 			NetworkID:   instancePort.NetworkID,
-			DeviceOwner: "network:router_interface",
+			DeviceOwner: []string{"network:router_interface", "network:router_interface_distributed", "network:ha_router_replicated_interface", "network:router_ha_interface"},
 		}
 
 		networkPorts, err := s.client.ListPort(networkPortsOpts)
@@ -111,11 +125,11 @@ func (s *Service) GetPortForExternalNetwork(instanceID string, externalNetworkID
 
 func (s *Service) CreatePort(eventObject runtime.Object, portSpec *infrav1.ResolvedPortSpec) (*ports.Port, error) {
 	var addressPairs []ports.AddressPair
-	if !pointer.BoolDeref(portSpec.DisablePortSecurity, false) {
+	if !ptr.Deref(portSpec.DisablePortSecurity, false) {
 		for _, ap := range portSpec.AllowedAddressPairs {
 			addressPairs = append(addressPairs, ports.AddressPair{
 				IPAddress:  ap.IPAddress,
-				MACAddress: pointer.StringDeref(ap.MACAddress, ""),
+				MACAddress: ptr.Deref(ap.MACAddress, ""),
 			})
 		}
 	}
@@ -125,8 +139,8 @@ func (s *Service) CreatePort(eventObject runtime.Object, portSpec *infrav1.Resol
 		fixedIPs = make([]ports.IP, len(portSpec.FixedIPs))
 		for i, fixedIP := range portSpec.FixedIPs {
 			fixedIPs[i] = ports.IP{
-				SubnetID:  pointer.StringDeref(fixedIP.SubnetID, ""),
-				IPAddress: pointer.StringDeref(fixedIP.IPAddress, ""),
+				SubnetID:  ptr.Deref(fixedIP.SubnetID, ""),
+				IPAddress: ptr.Deref(fixedIP.IPAddress, ""),
 			}
 		}
 	}
@@ -146,7 +160,7 @@ func (s *Service) CreatePort(eventObject runtime.Object, portSpec *infrav1.Resol
 		NetworkID:             portSpec.NetworkID,
 		Description:           portSpec.Description,
 		AdminStateUp:          portSpec.AdminStateUp,
-		MACAddress:            pointer.StringDeref(portSpec.MACAddress, ""),
+		MACAddress:            ptr.Deref(portSpec.MACAddress, ""),
 		AllowedAddressPairs:   addressPairs,
 		ValueSpecs:            valueSpecs,
 		PropagateUplinkStatus: portSpec.PropagateUplinkStatus,
@@ -170,15 +184,15 @@ func (s *Service) CreatePort(eventObject runtime.Object, portSpec *infrav1.Resol
 
 	portsBindingOpts := portsbinding.CreateOptsExt{
 		CreateOptsBuilder: builder,
-		HostID:            pointer.StringDeref(portSpec.HostID, ""),
-		VNICType:          pointer.StringDeref(portSpec.VNICType, ""),
+		HostID:            ptr.Deref(portSpec.HostID, ""),
+		VNICType:          ptr.Deref(portSpec.VNICType, ""),
 		Profile:           getPortProfile(portSpec.Profile),
 	}
 	builder = portsBindingOpts
 
 	port, err := s.client.CreatePort(builder)
 	if err != nil {
-		record.Warnf(eventObject, "FailedCreatePort", "Failed to create port %s: %v", port.Name, err)
+		record.Warnf(eventObject, "FailedCreatePort", "Failed to create port %s: %v", portSpec.Name, err)
 		return nil, err
 	}
 
@@ -189,7 +203,7 @@ func (s *Service) CreatePort(eventObject runtime.Object, portSpec *infrav1.Resol
 		}
 	}
 	record.Eventf(eventObject, "SuccessfulCreatePort", "Created port %s with id %s", port.Name, port.ID)
-	if pointer.BoolDeref(portSpec.Trunk, false) {
+	if ptr.Deref(portSpec.Trunk, false) {
 		trunk, err := s.getOrCreateTrunkForPort(eventObject, port)
 		if err != nil {
 			record.Warnf(eventObject, "FailedCreateTrunk", "Failed to create trunk for port %s: %v", port.Name, err)
@@ -213,10 +227,10 @@ func getPortProfile(p *infrav1.BindingProfile) map[string]interface{} {
 
 	// if p.OVSHWOffload is true, we need to set the profile
 	// to enable hardware offload for the port
-	if pointer.BoolDeref(p.OVSHWOffload, false) {
+	if ptr.Deref(p.OVSHWOffload, false) {
 		portProfile["capabilities"] = []string{"switchdev"}
 	}
-	if pointer.BoolDeref(p.TrustedVF, false) {
+	if ptr.Deref(p.TrustedVF, false) {
 		portProfile["trusted"] = true
 	}
 
@@ -332,12 +346,11 @@ func (s *Service) CreatePorts(eventObject runtime.Object, desiredPorts []infrav1
 	return nil
 }
 
-// ConstructPorts builds an array of ports from the machine spec.
-// If no ports are in the spec, returns a single port for a network connection to the default cluster network.
-func (s *Service) ConstructPorts(spec *infrav1.OpenStackMachineSpec, clusterResourceName, baseName string, defaultNetwork *infrav1.NetworkStatusWithSubnets, managedSecurityGroup *string, baseTags []string) ([]infrav1.ResolvedPortSpec, error) {
-	ports := spec.Ports
-
-	defaultSecurityGroupIDs, err := s.GetSecurityGroups(spec.SecurityGroups)
+// ConstructPorts builds an array of ports from given parameters.
+// If no ports are provided, returns a single port for a network connection to the default cluster network. We'll want to remove this default port in the future
+// to call this function without dependency on the default network.
+func (s *Service) ConstructPorts(instancePorts []infrav1.PortOpts, instanceSecurityGroups []infrav1.SecurityGroupParam, instanceTrunk bool, clusterResourceName, baseName string, defaultNetwork *infrav1.NetworkStatusWithSubnets, managedSecurityGroup *string, baseTags []string) ([]infrav1.ResolvedPortSpec, error) {
+	defaultSecurityGroupIDs, err := s.GetSecurityGroups(instanceSecurityGroups)
 	if err != nil {
 		return nil, fmt.Errorf("error getting security groups: %v", err)
 	}
@@ -345,32 +358,21 @@ func (s *Service) ConstructPorts(spec *infrav1.OpenStackMachineSpec, clusterReso
 		defaultSecurityGroupIDs = append(defaultSecurityGroupIDs, *managedSecurityGroup)
 	}
 
-	// Ensure user-specified ports have all required fields
-	resolvedPorts, err := s.normalizePorts(ports, clusterResourceName, baseName, spec.Trunk, defaultSecurityGroupIDs, defaultNetwork, baseTags)
-	if err != nil {
-		return nil, err
+	// If no ports are specified, create a single port which will get default options.
+	if len(instancePorts) == 0 {
+		instancePorts = make([]infrav1.PortOpts, 1)
 	}
 
-	// no networks or ports found in the spec, so create a port on the cluster network
-	if len(resolvedPorts) == 0 {
-		resolvedPorts = make([]infrav1.ResolvedPortSpec, 1)
-		resolvedPort := &resolvedPorts[0]
-		resolvedPort.Name = getPortName(baseName, nil, 0)
-		resolvedPort.Description = names.GetDescription(clusterResourceName)
-		if len(baseTags) > 0 {
-			resolvedPort.Tags = baseTags
-		}
-		if spec.Trunk {
-			resolvedPort.Trunk = &spec.Trunk
-		}
-		resolvedPort.SecurityGroups = defaultSecurityGroupIDs
-		resolvedPort.NetworkID, resolvedPort.FixedIPs, _ = defaultNetworkTarget(defaultNetwork)
+	// Ensure user-specified ports have all required fields
+	resolvedPorts, err := s.normalizePorts(instancePorts, clusterResourceName, baseName, instanceTrunk, defaultSecurityGroupIDs, defaultNetwork, baseTags)
+	if err != nil {
+		return nil, err
 	}
 
 	// trunk support is required if any port has trunk enabled
 	portUsesTrunk := func() bool {
 		for _, port := range resolvedPorts {
-			if pointer.BoolDeref(port.Trunk, false) {
+			if ptr.Deref(port.Trunk, false) {
 				return true
 			}
 		}

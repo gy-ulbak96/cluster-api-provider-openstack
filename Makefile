@@ -48,6 +48,7 @@ ENVSUBST := $(TOOLS_BIN_DIR)/envsubst
 GINKGO := $(TOOLS_BIN_DIR)/ginkgo
 GOJQ := $(TOOLS_BIN_DIR)/gojq
 GOLANGCI_LINT := $(TOOLS_BIN_DIR)/golangci-lint
+GOTESTSUM := $(TOOLS_BIN_DIR)/gotestsum
 KUSTOMIZE := $(TOOLS_BIN_DIR)/kustomize
 MOCKGEN := $(TOOLS_BIN_DIR)/mockgen
 RELEASE_NOTES := $(TOOLS_BIN_DIR)/release-notes
@@ -133,14 +134,16 @@ ifdef KUBEBUILDER_ASSETS_DIR
 	setup_envtest_extra_args += --bin-dir $(KUBEBUILDER_ASSETS_DIR)
 endif
 
+.PHONY: kubebuilder_assets
+kubebuilder_assets: $(SETUP_ENVTEST)
+	@echo Fetching assets for $(KUBEBUILDER_ENVTEST_KUBERNETES_VERSION)
+	$(eval KUBEBUILDER_ASSETS ?= $(shell $(SETUP_ENVTEST) use --use-env -p path $(setup_envtest_extra_args) $(KUBEBUILDER_ENVTEST_KUBERNETES_VERSION)))
+
 .PHONY: test
 TEST_PATHS ?= ./...
-test: $(SETUP_ENVTEST) ## Run tests
-	set -xeuf -o pipefail; \
-	if [ -z "$(KUBEBUILDER_ASSETS)" ]; then \
-		KUBEBUILDER_ASSETS=`$(SETUP_ENVTEST) use --use-env -p path $(setup_envtest_extra_args) $(KUBEBUILDER_ENVTEST_KUBERNETES_VERSION)`; \
-	fi; \
-	KUBEBUILDER_ASSETS="$$KUBEBUILDER_ASSETS" go test -v $(TEST_PATHS) $(TEST_ARGS)
+test: $(ARTIFACTS) $(GOTESTSUM) kubebuilder_assets
+	KUBEBUILDER_ASSETS="$(KUBEBUILDER_ASSETS)" $(GOTESTSUM) --junitfile $(ARTIFACTS)/junit.test.xml --junitfile-hide-empty-pkg --jsonfile $(ARTIFACTS)/test-output.log -- \
+			   -v $(TEST_PATHS) $(TEST_ARGS)
 
 E2E_TEMPLATES_DIR=test/e2e/data/infrastructure-openstack
 E2E_KUSTOMIZE_DIR=test/e2e/data/kustomize
@@ -150,7 +153,6 @@ E2E_NO_ARTIFACT_TEMPLATES_DIR=test/e2e/data/infrastructure-openstack-no-artifact
 .PHONY: e2e-templates
 e2e-templates: ## Generate cluster templates for e2e tests
 e2e-templates: $(addprefix $(E2E_NO_ARTIFACT_TEMPLATES_DIR)/, \
-		 cluster-template-v1alpha6.yaml \
 		 cluster-template-v1alpha7.yaml \
 		 cluster-template-md-remediation.yaml \
 		 cluster-template-kcp-remediation.yaml \
@@ -160,7 +162,8 @@ e2e-templates: $(addprefix $(E2E_NO_ARTIFACT_TEMPLATES_DIR)/, \
 		 cluster-template.yaml \
 		 cluster-template-flatcar.yaml \
                  cluster-template-k8s-upgrade.yaml \
-		 cluster-template-flatcar-sysext.yaml)
+		 cluster-template-flatcar-sysext.yaml \
+		 cluster-template-no-bastion.yaml)
 # Currently no templates that require CI artifacts
 # $(addprefix $(E2E_TEMPLATES_DIR)/, add-templates-here.yaml) \
 
@@ -264,10 +267,10 @@ generate-controller-gen: $(CONTROLLER_GEN)
 capo_module := sigs.k8s.io/cluster-api-provider-openstack
 generate-conversion-gen: $(CONVERSION_GEN)
 	$(CONVERSION_GEN) \
-		--input-dirs=$(capo_module)/api/v1alpha5 \
 		--input-dirs=$(capo_module)/api/v1alpha6 \
 		--input-dirs=$(capo_module)/api/v1alpha7 \
 		--extra-dirs=$(capo_module)/pkg/utils/optional \
+		--extra-dirs=$(capo_module)/pkg/utils/conversioncommon \
 		--output-file-base=zz_generated.conversion \
 		--trim-path-prefix=$(capo_module)/ \
 		--go-header-file=./hack/boilerplate/boilerplate.generatego.txt
@@ -289,7 +292,7 @@ generate-manifests: $(CONTROLLER_GEN) ## Generate manifests e.g. CRD, RBAC etc.
 		rbac:roleName=manager-role
 
 .PHONY: generate-api-docs
-generate-api-docs: generate-api-docs-v1beta1 generate-api-docs-v1alpha7 generate-api-docs-v1alpha6
+generate-api-docs: generate-api-docs-v1beta1 generate-api-docs-v1alpha7 generate-api-docs-v1alpha6 generate-api-docs-v1alpha1
 generate-api-docs-%: $(GEN_CRD_API_REFERENCE_DOCS) FORCE
 	$(GEN_CRD_API_REFERENCE_DOCS) \
 		-api-dir=./api/$* \
@@ -303,7 +306,7 @@ generate-api-docs-%: $(GEN_CRD_API_REFERENCE_DOCS) FORCE
 
 .PHONY: docker-build
 docker-build: ## Build the docker image for controller-manager
-	docker build -f Dockerfile --build-arg goproxy=$(GOPROXY) --build-arg ARCH=$(ARCH) --build-arg LDFLAGS="$(LDFLAGS)" . -t $(CONTROLLER_IMG_TAG)
+	docker build -f Dockerfile --build-arg goproxy=$(GOPROXY) --build-arg ARCH=$(ARCH) --build-arg ldflags="$(LDFLAGS)" . -t $(CONTROLLER_IMG_TAG)
 
 .PHONY: docker-push
 docker-push: ## Push the docker image

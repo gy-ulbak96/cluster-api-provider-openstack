@@ -23,16 +23,14 @@ import (
 	"time"
 
 	"github.com/go-logr/logr/testr"
-	"github.com/golang/mock/gomock"
-	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
-	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/pointer"
+	. "github.com/onsi/gomega" //nolint:revive
+	"go.uber.org/mock/gomock"
+	"k8s.io/utils/ptr"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/clients"
@@ -56,7 +54,7 @@ func TestService_getImageID(t *testing.T) {
 			testName: "Return image ID when ID given",
 			image:    infrav1.ImageParam{ID: &imageID},
 			want:     imageID,
-			expect:   func(m *mock.MockImageClientMockRecorder) {},
+			expect:   func(*mock.MockImageClientMockRecorder) {},
 			wantErr:  false,
 		},
 		{
@@ -195,8 +193,8 @@ func getDefaultInstanceSpec() *InstanceSpec {
 		Metadata: map[string]string{
 			"test-metadata": "test-value",
 		},
-		ConfigDrive:   *pointer.Bool(true),
-		FailureDomain: *pointer.String(failureDomain),
+		ConfigDrive:   *ptr.To(true),
+		FailureDomain: *ptr.To(failureDomain),
 		ServerGroupID: serverGroupUUID,
 		Tags:          []string{"test-tag"},
 	}
@@ -333,7 +331,7 @@ func TestService_ReconcileInstance(t *testing.T) {
 			getInstanceSpec: func() *InstanceSpec {
 				s := getDefaultInstanceSpec()
 				s.RootVolume = &infrav1.RootVolume{
-					Size: 50,
+					SizeGiB: 50,
 				}
 				return s
 			},
@@ -343,12 +341,11 @@ func TestService_ReconcileInstance(t *testing.T) {
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-root", openStackMachineName)}).
 					Return([]volumes.Volume{}, nil)
 				r.volume.CreateVolume(volumes.CreateOpts{
-					Size:             50,
-					AvailabilityZone: failureDomain,
-					Description:      fmt.Sprintf("Root volume for %s", openStackMachineName),
-					Name:             fmt.Sprintf("%s-root", openStackMachineName),
-					ImageID:          imageUUID,
-					Multiattach:      false,
+					Size:        50,
+					Description: fmt.Sprintf("Root volume for %s", openStackMachineName),
+					Name:        fmt.Sprintf("%s-root", openStackMachineName),
+					ImageID:     imageUUID,
+					Multiattach: false,
 				}).Return(&volumes.Volume{ID: rootVolumeUUID}, nil)
 				expectVolumePollSuccess(r.volume, rootVolumeUUID)
 
@@ -375,10 +372,13 @@ func TestService_ReconcileInstance(t *testing.T) {
 			getInstanceSpec: func() *InstanceSpec {
 				s := getDefaultInstanceSpec()
 				s.RootVolume = &infrav1.RootVolume{
-					Size:             50,
-					AvailabilityZone: "test-alternate-az",
-					VolumeType:       "test-volume-type",
+					SizeGiB: 50,
 				}
+				azName := infrav1.VolumeAZName("test-alternate-az")
+				s.RootVolume.AvailabilityZone = &infrav1.VolumeAvailabilityZone{
+					Name: &azName,
+				}
+				s.RootVolume.Type = "test-volume-type"
 				return s
 			},
 			expect: func(r *recorders) {
@@ -389,6 +389,53 @@ func TestService_ReconcileInstance(t *testing.T) {
 				r.volume.CreateVolume(volumes.CreateOpts{
 					Size:             50,
 					AvailabilityZone: "test-alternate-az",
+					VolumeType:       "test-volume-type",
+					Description:      fmt.Sprintf("Root volume for %s", openStackMachineName),
+					Name:             fmt.Sprintf("%s-root", openStackMachineName),
+					ImageID:          imageUUID,
+					Multiattach:      false,
+				}).Return(&volumes.Volume{ID: rootVolumeUUID}, nil)
+				expectVolumePollSuccess(r.volume, rootVolumeUUID)
+
+				createMap := getDefaultServerMap()
+				serverMap := createMap["server"].(map[string]interface{})
+				serverMap["imageRef"] = ""
+				serverMap["block_device_mapping_v2"] = []map[string]interface{}{
+					{
+						"delete_on_termination": true,
+						"destination_type":      "volume",
+						"source_type":           "volume",
+						"uuid":                  rootVolumeUUID,
+						"boot_index":            float64(0),
+					},
+				}
+				expectCreateServer(r.compute, createMap, false)
+
+				// Don't delete ports because the server is created: DeleteInstance will do it
+			},
+			wantErr: false,
+		},
+		{
+			name: "Boot from volume with AZ from machine",
+			getInstanceSpec: func() *InstanceSpec {
+				s := getDefaultInstanceSpec()
+				s.RootVolume = &infrav1.RootVolume{
+					SizeGiB: 50,
+				}
+				s.RootVolume.AvailabilityZone = &infrav1.VolumeAvailabilityZone{
+					From: infrav1.VolumeAZFromMachine,
+				}
+				s.RootVolume.Type = "test-volume-type"
+				return s
+			},
+			expect: func(r *recorders) {
+				expectDefaultFlavor(r.compute)
+
+				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-root", openStackMachineName)}).
+					Return([]volumes.Volume{}, nil)
+				r.volume.CreateVolume(volumes.CreateOpts{
+					Size:             50,
+					AvailabilityZone: failureDomain,
 					VolumeType:       "test-volume-type",
 					Description:      fmt.Sprintf("Root volume for %s", openStackMachineName),
 					Name:             fmt.Sprintf("%s-root", openStackMachineName),
@@ -420,7 +467,7 @@ func TestService_ReconcileInstance(t *testing.T) {
 			getInstanceSpec: func() *InstanceSpec {
 				s := getDefaultInstanceSpec()
 				s.RootVolume = &infrav1.RootVolume{
-					Size: 50,
+					SizeGiB: 50,
 				}
 				return s
 			},
@@ -430,12 +477,11 @@ func TestService_ReconcileInstance(t *testing.T) {
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-root", openStackMachineName)}).
 					Return([]volumes.Volume{}, nil)
 				r.volume.CreateVolume(volumes.CreateOpts{
-					Size:             50,
-					AvailabilityZone: failureDomain,
-					Description:      fmt.Sprintf("Root volume for %s", openStackMachineName),
-					Name:             fmt.Sprintf("%s-root", openStackMachineName),
-					ImageID:          imageUUID,
-					Multiattach:      false,
+					Size:        50,
+					Description: fmt.Sprintf("Root volume for %s", openStackMachineName),
+					Name:        fmt.Sprintf("%s-root", openStackMachineName),
+					ImageID:     imageUUID,
+					Multiattach: false,
 				}).Return(&volumes.Volume{ID: rootVolumeUUID}, nil)
 				expectVolumePoll(r.volume, rootVolumeUUID, []string{"creating", "error"})
 			},
@@ -446,7 +492,7 @@ func TestService_ReconcileInstance(t *testing.T) {
 			getInstanceSpec: func() *InstanceSpec {
 				s := getDefaultInstanceSpec()
 				s.RootVolume = &infrav1.RootVolume{
-					Size: 50,
+					SizeGiB: 50,
 				}
 				s.AdditionalBlockDevices = []infrav1.AdditionalBlockDevice{
 					{
@@ -475,24 +521,22 @@ func TestService_ReconcileInstance(t *testing.T) {
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-root", openStackMachineName)}).
 					Return([]volumes.Volume{}, nil)
 				r.volume.CreateVolume(volumes.CreateOpts{
-					Size:             50,
-					AvailabilityZone: failureDomain,
-					Description:      fmt.Sprintf("Root volume for %s", openStackMachineName),
-					Name:             fmt.Sprintf("%s-root", openStackMachineName),
-					ImageID:          imageUUID,
-					Multiattach:      false,
+					Size:        50,
+					Description: fmt.Sprintf("Root volume for %s", openStackMachineName),
+					Name:        fmt.Sprintf("%s-root", openStackMachineName),
+					ImageID:     imageUUID,
+					Multiattach: false,
 				}).Return(&volumes.Volume{ID: rootVolumeUUID}, nil)
 				expectVolumePollSuccess(r.volume, rootVolumeUUID)
 
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-etcd", openStackMachineName)}).
 					Return([]volumes.Volume{}, nil)
 				r.volume.CreateVolume(volumes.CreateOpts{
-					Size:             50,
-					AvailabilityZone: failureDomain,
-					Description:      fmt.Sprintf("Additional block device for %s", openStackMachineName),
-					Name:             fmt.Sprintf("%s-etcd", openStackMachineName),
-					Multiattach:      false,
-					VolumeType:       "test-volume-type",
+					Size:        50,
+					Description: fmt.Sprintf("Additional block device for %s", openStackMachineName),
+					Name:        fmt.Sprintf("%s-etcd", openStackMachineName),
+					Multiattach: false,
+					VolumeType:  "test-volume-type",
 				}).Return(&volumes.Volume{ID: additionalBlockDeviceVolumeUUID}, nil)
 				expectVolumePollSuccess(r.volume, additionalBlockDeviceVolumeUUID)
 
@@ -561,12 +605,11 @@ func TestService_ReconcileInstance(t *testing.T) {
 				r.volume.ListVolumes(volumes.ListOpts{Name: fmt.Sprintf("%s-etcd", openStackMachineName)}).
 					Return([]volumes.Volume{}, nil)
 				r.volume.CreateVolume(volumes.CreateOpts{
-					Size:             50,
-					AvailabilityZone: failureDomain,
-					Description:      fmt.Sprintf("Additional block device for %s", openStackMachineName),
-					Name:             fmt.Sprintf("%s-etcd", openStackMachineName),
-					Multiattach:      false,
-					VolumeType:       "test-volume-type",
+					Size:        50,
+					Description: fmt.Sprintf("Additional block device for %s", openStackMachineName),
+					Name:        fmt.Sprintf("%s-etcd", openStackMachineName),
+					Multiattach: false,
+					VolumeType:  "test-volume-type",
 				}).Return(&volumes.Volume{ID: additionalBlockDeviceVolumeUUID}, nil)
 				expectVolumePollSuccess(r.volume, additionalBlockDeviceVolumeUUID)
 
@@ -607,6 +650,7 @@ func TestService_ReconcileInstance(t *testing.T) {
 			name: "Additional block device success with explicit AZ",
 			getInstanceSpec: func() *InstanceSpec {
 				s := getDefaultInstanceSpec()
+				azName := infrav1.VolumeAZName("test-alternate-az")
 				s.AdditionalBlockDevices = []infrav1.AdditionalBlockDevice{
 					{
 						Name:    "etcd",
@@ -614,8 +658,10 @@ func TestService_ReconcileInstance(t *testing.T) {
 						Storage: infrav1.BlockDeviceStorage{
 							Type: "Volume",
 							Volume: &infrav1.BlockDeviceVolume{
-								AvailabilityZone: "test-alternate-az",
-								Type:             "test-volume-type",
+								Type: "test-volume-type",
+								AvailabilityZone: &infrav1.VolumeAvailabilityZone{
+									Name: &azName,
+								},
 							},
 						},
 					},
@@ -706,101 +752,6 @@ func TestService_ReconcileInstance(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Service.CreateInstance() error = %v, wantErr %v", err, tt.wantErr)
 				return
-			}
-		})
-	}
-}
-
-func TestService_DeleteInstance(t *testing.T) {
-	RegisterTestingT(t)
-
-	getDefaultInstanceStatus := func() *InstanceStatus {
-		return &InstanceStatus{
-			server: &clients.ServerExt{
-				Server: servers.Server{
-					ID: instanceUUID,
-				},
-			},
-		}
-	}
-
-	// *******************
-	// START OF TEST CASES
-	// *******************
-
-	type recorders struct {
-		compute *mock.MockComputeClientMockRecorder
-		network *mock.MockNetworkClientMockRecorder
-		volume  *mock.MockVolumeClientMockRecorder
-	}
-
-	tests := []struct {
-		name           string
-		eventObject    runtime.Object
-		instanceStatus func() *InstanceStatus
-		rootVolume     *infrav1.RootVolume
-		expect         func(r *recorders)
-		wantErr        bool
-	}{
-		{
-			name:           "Defaults",
-			eventObject:    &infrav1.OpenStackMachine{},
-			instanceStatus: getDefaultInstanceStatus,
-			expect: func(r *recorders) {
-				r.compute.DeleteServer(instanceUUID).Return(nil)
-				r.compute.GetServer(instanceUUID).Return(nil, gophercloud.ErrDefault404{})
-			},
-			wantErr: false,
-		},
-		{
-			name:           "Dangling volume",
-			eventObject:    &infrav1.OpenStackMachine{},
-			instanceStatus: func() *InstanceStatus { return nil },
-			rootVolume: &infrav1.RootVolume{
-				Size: 50,
-			},
-			expect: func(r *recorders) {
-				// Fetch volume by name
-				volumeName := fmt.Sprintf("%s-root", openStackMachineName)
-				r.volume.ListVolumes(volumes.ListOpts{
-					AllTenants: false,
-					Name:       volumeName,
-					TenantID:   "",
-				}).Return([]volumes.Volume{{
-					ID:   rootVolumeUUID,
-					Name: volumeName,
-				}}, nil)
-
-				// Delete volume
-				r.volume.DeleteVolume(rootVolumeUUID, volumes.DeleteOpts{}).Return(nil)
-			},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockCtrl := gomock.NewController(t)
-			log := testr.New(t)
-			mockScopeFactory := scope.NewMockScopeFactory(mockCtrl, "")
-
-			computeRecorder := mockScopeFactory.ComputeClient.EXPECT()
-			networkRecorder := mockScopeFactory.NetworkClient.EXPECT()
-			volumeRecorder := mockScopeFactory.VolumeClient.EXPECT()
-
-			tt.expect(&recorders{computeRecorder, networkRecorder, volumeRecorder})
-
-			s, err := NewService(scope.NewWithLogger(mockScopeFactory, log))
-			if err != nil {
-				t.Fatalf("Failed to create service: %v", err)
-			}
-
-			instanceSpec := &InstanceSpec{
-				Name:       openStackMachineName,
-				RootVolume: tt.rootVolume,
-			}
-
-			if err := s.DeleteInstance(tt.eventObject, tt.instanceStatus(), instanceSpec); (err != nil) != tt.wantErr {
-				t.Errorf("Service.DeleteInstance() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

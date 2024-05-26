@@ -22,6 +22,7 @@ import (
 	apiconversion "k8s.io/apimachinery/pkg/conversion"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
+	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/conversioncommon"
 	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/optional"
 )
 
@@ -193,7 +194,7 @@ func restorev1beta1SubnetParam(previous *infrav1.SubnetParam, dst *infrav1.Subne
 
 	optional.RestoreString(&previous.ID, &dst.ID)
 
-	if dst.Filter != nil {
+	if previous.Filter != nil && dst.Filter != nil {
 		dst.Filter.FilterByNeutronTags = previous.Filter.FilterByNeutronTags
 	}
 }
@@ -257,7 +258,7 @@ func restorev1beta1RouterParam(previous *infrav1.RouterParam, dst *infrav1.Route
 	}
 
 	optional.RestoreString(&previous.ID, &dst.ID)
-	if dst.Filter != nil {
+	if previous.Filter != nil && dst.Filter != nil {
 		dst.Filter.FilterByNeutronTags = previous.Filter.FilterByNeutronTags
 	}
 }
@@ -484,6 +485,34 @@ func Convert_v1beta1_PortOpts_To_v1alpha7_PortOpts(in *infrav1.PortOpts, out *Po
 	return nil
 }
 
+/* RootVolume */
+
+func restorev1beta1BlockDeviceVolume(previous *infrav1.BlockDeviceVolume, dst *infrav1.BlockDeviceVolume) {
+	if previous == nil || dst == nil {
+		return
+	}
+
+	dstAZ := dst.AvailabilityZone
+	previousAZ := previous.AvailabilityZone
+
+	// Empty From (the default) will be converted to the explicit "Name"
+	if dstAZ != nil && previousAZ != nil && dstAZ.From == "Name" {
+		dstAZ.From = previousAZ.From
+	}
+}
+
+func Convert_v1alpha7_RootVolume_To_v1beta1_RootVolume(in *RootVolume, out *infrav1.RootVolume, s apiconversion.Scope) error {
+	out.SizeGiB = in.Size
+	out.Type = in.VolumeType
+	return conversioncommon.Convert_string_To_Pointer_v1beta1_VolumeAvailabilityZone(&in.AvailabilityZone, &out.AvailabilityZone, s)
+}
+
+func Convert_v1beta1_RootVolume_To_v1alpha7_RootVolume(in *infrav1.RootVolume, out *RootVolume, s apiconversion.Scope) error {
+	out.Size = in.SizeGiB
+	out.VolumeType = in.Type
+	return conversioncommon.Convert_Pointer_v1beta1_VolumeAvailabilityZone_To_string(&in.AvailabilityZone, &out.AvailabilityZone, s)
+}
+
 /* SecurityGroup */
 
 func Convert_v1alpha7_SecurityGroup_To_v1beta1_SecurityGroupStatus(in *SecurityGroup, out *infrav1.SecurityGroupStatus, _ apiconversion.Scope) error {
@@ -508,6 +537,17 @@ func Convert_v1alpha7_OpenStackIdentityReference_To_v1beta1_OpenStackIdentityRef
 func Convert_v1beta1_OpenStackIdentityReference_To_v1alpha7_OpenStackIdentityReference(in *infrav1.OpenStackIdentityReference, out *OpenStackIdentityReference, _ apiconversion.Scope) error {
 	out.Name = in.Name
 	return nil
+}
+
+/* APIServerLoadBalancer */
+
+func restorev1beta1APIServerLoadBalancer(previous *infrav1.APIServerLoadBalancer, dst *infrav1.APIServerLoadBalancer) {
+	if dst == nil || previous == nil {
+		return
+	}
+
+	// AZ doesn't exist in v1alpha6, so always restore.
+	dst.AvailabilityZone = previous.AvailabilityZone
 }
 
 /* Placeholders */

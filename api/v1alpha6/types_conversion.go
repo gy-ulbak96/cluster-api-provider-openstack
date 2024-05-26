@@ -21,9 +21,10 @@ import (
 	"strings"
 
 	apiconversion "k8s.io/apimachinery/pkg/conversion"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
 	infrav1 "sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1"
+	"sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/conversioncommon"
 	optional "sigs.k8s.io/cluster-api-provider-openstack/pkg/utils/optional"
 )
 
@@ -224,7 +225,7 @@ func restorev1beta1SubnetParam(previous *infrav1.SubnetParam, dst *infrav1.Subne
 
 	optional.RestoreString(&previous.ID, &dst.ID)
 
-	if dst.Filter != nil {
+	if previous.Filter != nil && dst.Filter != nil {
 		dst.Filter.FilterByNeutronTags = previous.Filter.FilterByNeutronTags
 	}
 }
@@ -387,10 +388,10 @@ func Convert_v1beta1_PortOpts_To_v1alpha6_PortOpts(in *infrav1.PortOpts, out *Po
 
 	if in.Profile != nil {
 		out.Profile = make(map[string]string)
-		if pointer.BoolDeref(in.Profile.OVSHWOffload, false) {
+		if ptr.Deref(in.Profile.OVSHWOffload, false) {
 			(out.Profile)["capabilities"] = "[\"switchdev\"]"
 		}
-		if pointer.BoolDeref(in.Profile.TrustedVF, false) {
+		if ptr.Deref(in.Profile.TrustedVF, false) {
 			(out.Profile)["trusted"] = trueString
 		}
 	}
@@ -402,21 +403,21 @@ func Convert_Map_string_To_Interface_To_v1beta1_BindingProfile(in map[string]str
 	for k, v := range in {
 		if k == "capabilities" {
 			if strings.Contains(v, "switchdev") {
-				out.OVSHWOffload = pointer.Bool(true)
+				out.OVSHWOffload = ptr.To(true)
 			}
 		}
 		if k == "trusted" && v == trueString {
-			out.TrustedVF = pointer.Bool(true)
+			out.TrustedVF = ptr.To(true)
 		}
 	}
 	return nil
 }
 
 func Convert_v1beta1_BindingProfile_To_Map_string_To_Interface(in *infrav1.BindingProfile, out map[string]string, _ apiconversion.Scope) error {
-	if pointer.BoolDeref(in.OVSHWOffload, false) {
+	if ptr.Deref(in.OVSHWOffload, false) {
 		(out)["capabilities"] = "[\"switchdev\"]"
 	}
-	if pointer.BoolDeref(in.TrustedVF, false) {
+	if ptr.Deref(in.TrustedVF, false) {
 		(out)["trusted"] = trueString
 	}
 	return nil
@@ -426,6 +427,33 @@ func Convert_v1beta1_BindingProfile_To_Map_string_To_Interface(in *infrav1.Bindi
 /* AddressPair */
 /* Instance */
 /* RootVolume */
+
+func restorev1beta1BlockDeviceVolume(previous *infrav1.BlockDeviceVolume, dst *infrav1.BlockDeviceVolume) {
+	if previous == nil || dst == nil {
+		return
+	}
+
+	dstAZ := dst.AvailabilityZone
+	previousAZ := previous.AvailabilityZone
+
+	// Empty From (the default) will be converted to the explicit "Name"
+	if dstAZ != nil && previousAZ != nil && dstAZ.From == "Name" {
+		dstAZ.From = previousAZ.From
+	}
+}
+
+func Convert_v1alpha6_RootVolume_To_v1beta1_RootVolume(in *RootVolume, out *infrav1.RootVolume, s apiconversion.Scope) error {
+	out.SizeGiB = in.Size
+	out.Type = in.VolumeType
+	return conversioncommon.Convert_string_To_Pointer_v1beta1_VolumeAvailabilityZone(&in.AvailabilityZone, &out.AvailabilityZone, s)
+}
+
+func Convert_v1beta1_RootVolume_To_v1alpha6_RootVolume(in *infrav1.RootVolume, out *RootVolume, s apiconversion.Scope) error {
+	out.Size = in.SizeGiB
+	out.VolumeType = in.Type
+	return conversioncommon.Convert_Pointer_v1beta1_VolumeAvailabilityZone_To_string(&in.AvailabilityZone, &out.AvailabilityZone, s)
+}
+
 /* Network */
 
 func Convert_v1alpha6_Network_To_v1beta1_NetworkStatusWithSubnets(in *Network, out *infrav1.NetworkStatusWithSubnets, s apiconversion.Scope) error {
@@ -497,7 +525,6 @@ func Convert_v1alpha6_SecurityGroup_To_v1beta1_SecurityGroupStatus(in *SecurityG
 }
 
 /* SecurityGroupRule */
-/* APIServerLoadBalancer */
 /* ValueSpec */
 /* OpenStackIdentityReference */
 
@@ -508,6 +535,17 @@ func Convert_v1alpha6_OpenStackIdentityReference_To_v1beta1_OpenStackIdentityRef
 func Convert_v1beta1_OpenStackIdentityReference_To_v1alpha6_OpenStackIdentityReference(in *infrav1.OpenStackIdentityReference, out *OpenStackIdentityReference, _ apiconversion.Scope) error {
 	out.Name = in.Name
 	return nil
+}
+
+/* APIServerLoadBalancer */
+
+func restorev1beta1APIServerLoadBalancer(previous *infrav1.APIServerLoadBalancer, dst *infrav1.APIServerLoadBalancer) {
+	if dst == nil || previous == nil {
+		return
+	}
+
+	// AZ doesn't exist in v1alpha6, so always restore.
+	dst.AvailabilityZone = previous.AvailabilityZone
 }
 
 /* Placeholders */

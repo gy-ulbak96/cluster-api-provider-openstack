@@ -27,7 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	utilconversion "sigs.k8s.io/cluster-api/util/conversion"
 	"sigs.k8s.io/controller-runtime/pkg/conversion"
 
@@ -196,8 +196,6 @@ func TestFuzzyConversion(t *testing.T) {
 }
 
 func TestNetworksToPorts(t *testing.T) {
-	g := gomega.NewWithT(t)
-
 	const (
 		networkuuid = "55e18f0a-d89a-4d69-b18f-160fb142cb5d"
 		subnetuuid  = "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
@@ -221,7 +219,7 @@ func TestNetworksToPorts(t *testing.T) {
 				Ports: []infrav1.PortOpts{
 					{
 						Network: &infrav1.NetworkParam{
-							ID: pointer.String(networkuuid),
+							ID: ptr.To(networkuuid),
 						},
 					},
 				},
@@ -282,12 +280,12 @@ func TestNetworksToPorts(t *testing.T) {
 				Ports: []infrav1.PortOpts{
 					{
 						Network: &infrav1.NetworkParam{
-							ID: pointer.String(networkuuid),
+							ID: ptr.To(networkuuid),
 						},
 						FixedIPs: []infrav1.FixedIP{
 							{
 								Subnet: &infrav1.SubnetParam{
-									ID: pointer.String(subnetuuid),
+									ID: ptr.To(subnetuuid),
 								},
 							},
 						},
@@ -326,7 +324,7 @@ func TestNetworksToPorts(t *testing.T) {
 				Ports: []infrav1.PortOpts{
 					{
 						Network: &infrav1.NetworkParam{
-							ID: pointer.String(networkuuid),
+							ID: ptr.To(networkuuid),
 						},
 						FixedIPs: []infrav1.FixedIP{
 							{
@@ -388,19 +386,19 @@ func TestNetworksToPorts(t *testing.T) {
 				Ports: []infrav1.PortOpts{
 					{
 						Network: &infrav1.NetworkParam{
-							ID: pointer.String(networkuuid),
+							ID: ptr.To(networkuuid),
 						},
 						FixedIPs: []infrav1.FixedIP{
 							{
 								Subnet: &infrav1.SubnetParam{
-									ID: pointer.String(subnetuuid),
+									ID: ptr.To(subnetuuid),
 								},
 							},
 						},
 					},
 					{
 						Network: &infrav1.NetworkParam{
-							ID: pointer.String(networkuuid),
+							ID: ptr.To(networkuuid),
 						},
 						FixedIPs: []infrav1.FixedIP{
 							{
@@ -432,6 +430,8 @@ func TestNetworksToPorts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+
 			before := &OpenStackMachine{
 				Spec: tt.beforeMachineSpec,
 			}
@@ -448,11 +448,6 @@ func TestNetworksToPorts(t *testing.T) {
 // converted to SecurityGroupFilters, and merged with any existing
 // SecurityGroupFilters.
 func TestPortOptsConvertTo(t *testing.T) {
-	g := gomega.NewWithT(t)
-	scheme := runtime.NewScheme()
-	g.Expect(AddToScheme(scheme)).To(gomega.Succeed())
-	g.Expect(infrav1.AddToScheme(scheme)).To(gomega.Succeed())
-
 	// Variables used in the tests
 	uuids := []string{"abc123", "123abc"}
 	securityGroupsUuids := []infrav1.SecurityGroupParam{
@@ -465,7 +460,7 @@ func TestPortOptsConvertTo(t *testing.T) {
 	}
 	securityGroupFilterMerged := []infrav1.SecurityGroupParam{
 		{Filter: &infrav1.SecurityGroupFilter{Name: "one"}},
-		{ID: pointer.String("654cba")},
+		{ID: ptr.To("654cba")},
 		{ID: &uuids[0]},
 		{ID: &uuids[1]},
 	}
@@ -474,8 +469,8 @@ func TestPortOptsConvertTo(t *testing.T) {
 		"trusted":      "true",
 	}
 	convertedPortProfile := infrav1.BindingProfile{
-		OVSHWOffload: pointer.Bool(true),
-		TrustedVF:    pointer.Bool(true),
+		OVSHWOffload: ptr.To(true),
+		TrustedVF:    ptr.To(true),
 	}
 
 	tests := []struct {
@@ -522,6 +517,11 @@ func TestPortOptsConvertTo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			scheme := runtime.NewScheme()
+			g.Expect(AddToScheme(scheme)).To(gomega.Succeed())
+			g.Expect(infrav1.AddToScheme(scheme)).To(gomega.Succeed())
+
 			// The spoke machine template with added PortOpts
 			spokeMachineTemplate := OpenStackMachineTemplate{
 				Spec: OpenStackMachineTemplateSpec{
@@ -555,11 +555,6 @@ func TestPortOptsConvertTo(t *testing.T) {
 func TestMachineConversionControllerSpecFields(t *testing.T) {
 	// This tests that we still do field restoration when the controller modifies ProviderID and InstanceID in the spec
 
-	g := gomega.NewWithT(t)
-	scheme := runtime.NewScheme()
-	g.Expect(AddToScheme(scheme)).To(gomega.Succeed())
-	g.Expect(infrav1.AddToScheme(scheme)).To(gomega.Succeed())
-
 	// This test machine contains a network definition. If we restore it on
 	// down-conversion it will still have a network definition. If we don't,
 	// the network definition will have become a port definition.
@@ -578,7 +573,7 @@ func TestMachineConversionControllerSpecFields(t *testing.T) {
 	tests := []struct {
 		name              string
 		modifyUp          func(*infrav1.OpenStackMachine)
-		testAfter         func(*OpenStackMachine)
+		testAfter         func(gomega.Gomega, *OpenStackMachine)
 		expectNetworkDiff bool
 	}{
 		{
@@ -589,7 +584,7 @@ func TestMachineConversionControllerSpecFields(t *testing.T) {
 			modifyUp: func(up *infrav1.OpenStackMachine) {
 				up.Spec.Flavor = "new-flavor"
 			},
-			testAfter: func(after *OpenStackMachine) {
+			testAfter: func(g gomega.Gomega, after *OpenStackMachine) {
 				g.Expect(after.Spec.Flavor).To(gomega.Equal("new-flavor"))
 			},
 			expectNetworkDiff: true,
@@ -597,31 +592,31 @@ func TestMachineConversionControllerSpecFields(t *testing.T) {
 		{
 			name: "Set ProviderID",
 			modifyUp: func(up *infrav1.OpenStackMachine) {
-				up.Spec.ProviderID = pointer.String("new-provider-id")
+				up.Spec.ProviderID = ptr.To("new-provider-id")
 			},
-			testAfter: func(after *OpenStackMachine) {
-				g.Expect(after.Spec.ProviderID).To(gomega.Equal(pointer.String("new-provider-id")))
+			testAfter: func(g gomega.Gomega, after *OpenStackMachine) {
+				g.Expect(after.Spec.ProviderID).To(gomega.Equal(ptr.To("new-provider-id")))
 			},
 			expectNetworkDiff: false,
 		},
 		{
 			name: "Set InstanceID",
 			modifyUp: func(up *infrav1.OpenStackMachine) {
-				up.Spec.InstanceID = pointer.String("new-instance-id")
+				up.Status.InstanceID = ptr.To("new-instance-id")
 			},
-			testAfter: func(after *OpenStackMachine) {
-				g.Expect(after.Spec.InstanceID).To(gomega.Equal(pointer.String("new-instance-id")))
+			testAfter: func(g gomega.Gomega, after *OpenStackMachine) {
+				g.Expect(after.Spec.InstanceID).To(gomega.Equal(ptr.To("new-instance-id")))
 			},
 			expectNetworkDiff: false,
 		},
 		{
 			name: "Set ProviderID and non-ignored change",
 			modifyUp: func(up *infrav1.OpenStackMachine) {
-				up.Spec.ProviderID = pointer.String("new-provider-id")
+				up.Spec.ProviderID = ptr.To("new-provider-id")
 				up.Spec.Flavor = "new-flavor"
 			},
-			testAfter: func(after *OpenStackMachine) {
-				g.Expect(after.Spec.ProviderID).To(gomega.Equal(pointer.String("new-provider-id")))
+			testAfter: func(g gomega.Gomega, after *OpenStackMachine) {
+				g.Expect(after.Spec.ProviderID).To(gomega.Equal(ptr.To("new-provider-id")))
 				g.Expect(after.Spec.Flavor).To(gomega.Equal("new-flavor"))
 			},
 			expectNetworkDiff: true,
@@ -630,6 +625,10 @@ func TestMachineConversionControllerSpecFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			g := gomega.NewWithT(t)
+			scheme := runtime.NewScheme()
+			g.Expect(AddToScheme(scheme)).To(gomega.Succeed())
+			g.Expect(infrav1.AddToScheme(scheme)).To(gomega.Succeed())
 			before := testMachine()
 
 			up := infrav1.OpenStackMachine{}
@@ -643,7 +642,7 @@ func TestMachineConversionControllerSpecFields(t *testing.T) {
 			g.Expect(after.ConvertFrom(&up)).To(gomega.Succeed())
 
 			if tt.testAfter != nil {
-				tt.testAfter(&after)
+				tt.testAfter(g, &after)
 			}
 
 			if !tt.expectNetworkDiff {
@@ -762,4 +761,37 @@ func TestConvert_v1alpha6_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(t
 			g.Expect(&out.Template.Spec).To(gomega.Equal(tt.expectedOut), cmp.Diff(&out.Template.Spec, tt.expectedOut))
 		})
 	}
+}
+
+func Test_FuzzRestorers(t *testing.T) {
+	/* Cluster */
+	testhelpers.FuzzRestorer(t, "restorev1alpha6ClusterSpec", restorev1alpha6ClusterSpec)
+	testhelpers.FuzzRestorer(t, "restorev1beta1ClusterSpec", restorev1beta1ClusterSpec)
+	testhelpers.FuzzRestorer(t, "restorev1alpha6ClusterStatus", restorev1alpha6ClusterStatus)
+	testhelpers.FuzzRestorer(t, "restorev1beta1ClusterStatus", restorev1beta1ClusterStatus)
+	testhelpers.FuzzRestorer(t, "restorev1beta1Bastion", restorev1beta1Bastion)
+	testhelpers.FuzzRestorer(t, "restorev1beta1BastionStatus", restorev1beta1BastionStatus)
+
+	/* ClusterTemplate */
+	testhelpers.FuzzRestorer(t, "restorev1beta1ClusterTemplateSpec", restorev1beta1ClusterTemplateSpec)
+
+	/* Machine */
+	testhelpers.FuzzRestorer(t, "restorev1alpha6MachineSpec", restorev1alpha6MachineSpec)
+	testhelpers.FuzzRestorer(t, "restorev1beta1MachineSpec", restorev1beta1MachineSpec)
+
+	/* MachineTemplate */
+	testhelpers.FuzzRestorer(t, "restorev1alpha6MachineTemplateMachineSpec", restorev1alpha6MachineTemplateMachineSpec)
+
+	/* Types */
+	testhelpers.FuzzRestorer(t, "restorev1alpha6SecurityGroupFilter", restorev1alpha6SecurityGroupFilter)
+	testhelpers.FuzzRestorer(t, "restorev1beta1SecurityGroupParam", restorev1beta1SecurityGroupParam)
+	testhelpers.FuzzRestorer(t, "restorev1alpha6NetworkFilter", restorev1alpha6NetworkFilter)
+	testhelpers.FuzzRestorer(t, "restorev1beta1NetworkParam", restorev1beta1NetworkParam)
+	testhelpers.FuzzRestorer(t, "restorev1alpha6SubnetFilter", restorev1alpha6SubnetFilter)
+	testhelpers.FuzzRestorer(t, "restorev1alpha6SubnetParam", restorev1alpha6SubnetParam)
+	testhelpers.FuzzRestorer(t, "restorev1beta1SubnetParam", restorev1beta1SubnetParam)
+	testhelpers.FuzzRestorer(t, "restorev1alpha6Port", restorev1alpha6Port)
+	testhelpers.FuzzRestorer(t, "restorev1beta1BlockDeviceVolume", restorev1beta1BlockDeviceVolume)
+	testhelpers.FuzzRestorer(t, "restorev1alpha6SecurityGroup", restorev1alpha6SecurityGroup)
+	testhelpers.FuzzRestorer(t, "restorev1beta1APIServerLoadBalancer", restorev1beta1APIServerLoadBalancer)
 }

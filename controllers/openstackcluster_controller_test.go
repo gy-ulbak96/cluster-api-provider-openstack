@@ -22,7 +22,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/google/go-cmp/cmp"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
@@ -30,11 +29,12 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/subnets"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive
+	. "github.com/onsi/gomega"    //nolint:revive
+	"go.uber.org/mock/gomock"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/test/framework"
 	"sigs.k8s.io/cluster-api/util/annotations"
@@ -64,7 +64,7 @@ var _ = Describe("OpenStackCluster controller", func() {
 	bastionSpec := infrav1.OpenStackMachineSpec{
 		Image: infrav1.ImageParam{
 			Filter: &infrav1.ImageFilter{
-				Name: pointer.String("fake-name"),
+				Name: ptr.To("fake-name"),
 			},
 		},
 	}
@@ -196,10 +196,10 @@ var _ = Describe("OpenStackCluster controller", func() {
 		Expect(err).To(MatchError(clientCreateErr))
 		Expect(result).To(Equal(reconcile.Result{}))
 	})
-	It("should be able to reconcile when bastion is disabled and does not exist", func() {
-		testCluster.SetName("no-bastion")
+	It("should be able to reconcile when bastion is explicitly disabled and does not exist", func() {
+		testCluster.SetName("no-bastion-explicit")
 		testCluster.Spec = infrav1.OpenStackClusterSpec{
-			Bastion: &infrav1.Bastion{},
+			Bastion: &infrav1.Bastion{Enabled: ptr.To(false)},
 		}
 		err := k8sClient.Create(ctx, testCluster)
 		Expect(err).To(BeNil())
@@ -208,6 +208,9 @@ var _ = Describe("OpenStackCluster controller", func() {
 		testCluster.Status = infrav1.OpenStackClusterStatus{
 			Bastion: &infrav1.BastionStatus{
 				ID: "bastion-uuid",
+				Resolved: &infrav1.ResolvedMachineSpec{
+					ImageID: "imageID",
+				},
 			},
 		}
 		err = k8sClient.Status().Update(ctx, testCluster)
@@ -221,14 +224,14 @@ var _ = Describe("OpenStackCluster controller", func() {
 		computeClientRecorder.GetServer("bastion-uuid").Return(nil, gophercloud.ErrResourceNotFound{})
 
 		err = deleteBastion(scope, capiCluster, testCluster)
-		Expect(testCluster.Status.Bastion).To(BeNil())
 		Expect(err).To(BeNil())
+		Expect(testCluster.Status.Bastion).To(BeNil())
 	})
 	It("should adopt an existing bastion even if its uuid is not stored in status", func() {
 		testCluster.SetName("adopt-existing-bastion")
 		testCluster.Spec = infrav1.OpenStackClusterSpec{
 			Bastion: &infrav1.Bastion{
-				Enabled: true,
+				Enabled: ptr.To(true),
 				Spec:    &bastionSpec,
 			},
 		}
@@ -311,7 +314,7 @@ var _ = Describe("OpenStackCluster controller", func() {
 		testCluster.SetName("requeue-bastion")
 		testCluster.Spec = infrav1.OpenStackClusterSpec{
 			Bastion: &infrav1.Bastion{
-				Enabled: true,
+				Enabled: ptr.To(true),
 				Spec:    &bastionSpec,
 			},
 		}
@@ -393,7 +396,7 @@ var _ = Describe("OpenStackCluster controller", func() {
 		testCluster.SetName("requeue-bastion")
 		testCluster.Spec = infrav1.OpenStackClusterSpec{
 			Bastion: &infrav1.Bastion{
-				Enabled: true,
+				Enabled: ptr.To(true),
 				Spec:    &bastionSpec,
 			},
 		}
@@ -467,9 +470,7 @@ var _ = Describe("OpenStackCluster controller", func() {
 	})
 	It("should delete an existing bastion even if its uuid is not stored in status", func() {
 		testCluster.SetName("delete-existing-bastion")
-		testCluster.Spec = infrav1.OpenStackClusterSpec{
-			Bastion: &infrav1.Bastion{},
-		}
+		testCluster.Spec = infrav1.OpenStackClusterSpec{}
 		err := k8sClient.Create(ctx, testCluster)
 		Expect(err).To(BeNil())
 		err = k8sClient.Create(ctx, capiCluster)
@@ -516,16 +517,16 @@ var _ = Describe("OpenStackCluster controller", func() {
 		testCluster.SetName("subnet-filtering")
 		testCluster.Spec = infrav1.OpenStackClusterSpec{
 			Bastion: &infrav1.Bastion{
-				Enabled: true,
+				Enabled: ptr.To(true),
 				Spec:    &bastionSpec,
 			},
-			DisableAPIServerFloatingIP: pointer.Bool(true),
-			APIServerFixedIP:           pointer.String("10.0.0.1"),
+			DisableAPIServerFloatingIP: ptr.To(true),
+			APIServerFixedIP:           ptr.To("10.0.0.1"),
 			ExternalNetwork: &infrav1.NetworkParam{
-				ID: pointer.String(externalNetworkID),
+				ID: ptr.To(externalNetworkID),
 			},
 			Network: &infrav1.NetworkParam{
-				ID: pointer.String(clusterNetworkID),
+				ID: ptr.To(clusterNetworkID),
 			},
 		}
 		testCluster.Status = infrav1.OpenStackClusterStatus{
@@ -586,16 +587,16 @@ var _ = Describe("OpenStackCluster controller", func() {
 		testCluster.SetName("subnet-filtering")
 		testCluster.Spec = infrav1.OpenStackClusterSpec{
 			Bastion: &infrav1.Bastion{
-				Enabled: true,
+				Enabled: ptr.To(true),
 				Spec:    &bastionSpec,
 			},
-			DisableAPIServerFloatingIP: pointer.Bool(true),
-			APIServerFixedIP:           pointer.String("10.0.0.1"),
+			DisableAPIServerFloatingIP: ptr.To(true),
+			APIServerFixedIP:           ptr.To("10.0.0.1"),
 			ExternalNetwork: &infrav1.NetworkParam{
-				ID: pointer.String(externalNetworkID),
+				ID: ptr.To(externalNetworkID),
 			},
 			Network: &infrav1.NetworkParam{
-				ID: pointer.String(clusterNetworkID),
+				ID: ptr.To(clusterNetworkID),
 			},
 			Subnets: []infrav1.SubnetParam{
 				{ID: &clusterSubnets[0]},
@@ -662,11 +663,11 @@ var _ = Describe("OpenStackCluster controller", func() {
 
 		testCluster.SetName("subnet-filtering")
 		testCluster.Spec = infrav1.OpenStackClusterSpec{
-			DisableAPIServerFloatingIP: pointer.Bool(true),
-			APIServerFixedIP:           pointer.String("10.0.0.1"),
-			DisableExternalNetwork:     pointer.Bool(true),
+			DisableAPIServerFloatingIP: ptr.To(true),
+			APIServerFixedIP:           ptr.To("10.0.0.1"),
+			DisableExternalNetwork:     ptr.To(true),
 			Subnets: []infrav1.SubnetParam{
-				{ID: pointer.String(clusterSubnetID)},
+				{ID: ptr.To(clusterSubnetID)},
 			},
 		}
 		err := k8sClient.Create(ctx, testCluster)
@@ -757,7 +758,7 @@ func Test_getAPIServerPort(t *testing.T) {
 			name: "with API server port",
 			openStackCluster: &infrav1.OpenStackCluster{
 				Spec: infrav1.OpenStackClusterSpec{
-					APIServerPort: pointer.Int(6445),
+					APIServerPort: ptr.To(6445),
 				},
 			},
 			want: 6445,

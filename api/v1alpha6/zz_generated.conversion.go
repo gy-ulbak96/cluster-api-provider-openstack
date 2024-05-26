@@ -41,16 +41,6 @@ func init() {
 // RegisterConversions adds conversion functions to the given scheme.
 // Public to allow building arbitrary schemes.
 func RegisterConversions(s *runtime.Scheme) error {
-	if err := s.AddGeneratedConversionFunc((*APIServerLoadBalancer)(nil), (*v1beta1.APIServerLoadBalancer)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1alpha6_APIServerLoadBalancer_To_v1beta1_APIServerLoadBalancer(a.(*APIServerLoadBalancer), b.(*v1beta1.APIServerLoadBalancer), scope)
-	}); err != nil {
-		return err
-	}
-	if err := s.AddGeneratedConversionFunc((*v1beta1.APIServerLoadBalancer)(nil), (*APIServerLoadBalancer)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1beta1_APIServerLoadBalancer_To_v1alpha6_APIServerLoadBalancer(a.(*v1beta1.APIServerLoadBalancer), b.(*APIServerLoadBalancer), scope)
-	}); err != nil {
-		return err
-	}
 	if err := s.AddGeneratedConversionFunc((*AddressPair)(nil), (*v1beta1.AddressPair)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1alpha6_AddressPair_To_v1beta1_AddressPair(a.(*AddressPair), b.(*v1beta1.AddressPair), scope)
 	}); err != nil {
@@ -83,11 +73,6 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}
 	if err := s.AddGeneratedConversionFunc((*LoadBalancer)(nil), (*v1beta1.LoadBalancer)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1alpha6_LoadBalancer_To_v1beta1_LoadBalancer(a.(*LoadBalancer), b.(*v1beta1.LoadBalancer), scope)
-	}); err != nil {
-		return err
-	}
-	if err := s.AddGeneratedConversionFunc((*v1beta1.LoadBalancer)(nil), (*LoadBalancer)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1beta1_LoadBalancer_To_v1alpha6_LoadBalancer(a.(*v1beta1.LoadBalancer), b.(*LoadBalancer), scope)
 	}); err != nil {
 		return err
 	}
@@ -151,16 +136,6 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
-	if err := s.AddGeneratedConversionFunc((*OpenStackMachine)(nil), (*v1beta1.OpenStackMachine)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1alpha6_OpenStackMachine_To_v1beta1_OpenStackMachine(a.(*OpenStackMachine), b.(*v1beta1.OpenStackMachine), scope)
-	}); err != nil {
-		return err
-	}
-	if err := s.AddGeneratedConversionFunc((*v1beta1.OpenStackMachine)(nil), (*OpenStackMachine)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1beta1_OpenStackMachine_To_v1alpha6_OpenStackMachine(a.(*v1beta1.OpenStackMachine), b.(*OpenStackMachine), scope)
-	}); err != nil {
-		return err
-	}
 	if err := s.AddGeneratedConversionFunc((*OpenStackMachineList)(nil), (*v1beta1.OpenStackMachineList)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1alpha6_OpenStackMachineList_To_v1beta1_OpenStackMachineList(a.(*OpenStackMachineList), b.(*v1beta1.OpenStackMachineList), scope)
 	}); err != nil {
@@ -216,16 +191,6 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
-	if err := s.AddGeneratedConversionFunc((*RootVolume)(nil), (*v1beta1.RootVolume)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1alpha6_RootVolume_To_v1beta1_RootVolume(a.(*RootVolume), b.(*v1beta1.RootVolume), scope)
-	}); err != nil {
-		return err
-	}
-	if err := s.AddGeneratedConversionFunc((*v1beta1.RootVolume)(nil), (*RootVolume)(nil), func(a, b interface{}, scope conversion.Scope) error {
-		return Convert_v1beta1_RootVolume_To_v1alpha6_RootVolume(a.(*v1beta1.RootVolume), b.(*RootVolume), scope)
-	}); err != nil {
-		return err
-	}
 	if err := s.AddGeneratedConversionFunc((*Router)(nil), (*v1beta1.Router)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1alpha6_Router_To_v1beta1_Router(a.(*Router), b.(*v1beta1.Router), scope)
 	}); err != nil {
@@ -253,6 +218,11 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}
 	if err := s.AddGeneratedConversionFunc((*v1beta1.ValueSpec)(nil), (*ValueSpec)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1beta1_ValueSpec_To_v1alpha6_ValueSpec(a.(*v1beta1.ValueSpec), b.(*ValueSpec), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddConversionFunc((*APIServerLoadBalancer)(nil), (*v1beta1.APIServerLoadBalancer)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha6_APIServerLoadBalancer_To_v1beta1_APIServerLoadBalancer(a.(*APIServerLoadBalancer), b.(*v1beta1.APIServerLoadBalancer), scope)
 	}); err != nil {
 		return err
 	}
@@ -311,8 +281,18 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	if err := s.AddConversionFunc((*OpenStackMachine)(nil), (*v1beta1.OpenStackMachine)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha6_OpenStackMachine_To_v1beta1_OpenStackMachine(a.(*OpenStackMachine), b.(*v1beta1.OpenStackMachine), scope)
+	}); err != nil {
+		return err
+	}
 	if err := s.AddConversionFunc((*PortOpts)(nil), (*v1beta1.PortOpts)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1alpha6_PortOpts_To_v1beta1_PortOpts(a.(*PortOpts), b.(*v1beta1.PortOpts), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddConversionFunc((*RootVolume)(nil), (*v1beta1.RootVolume)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1alpha6_RootVolume_To_v1beta1_RootVolume(a.(*RootVolume), b.(*v1beta1.RootVolume), scope)
 	}); err != nil {
 		return err
 	}
@@ -346,6 +326,11 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	if err := s.AddConversionFunc((*v1beta1.APIServerLoadBalancer)(nil), (*APIServerLoadBalancer)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_APIServerLoadBalancer_To_v1alpha6_APIServerLoadBalancer(a.(*v1beta1.APIServerLoadBalancer), b.(*APIServerLoadBalancer), scope)
+	}); err != nil {
+		return err
+	}
 	if err := s.AddConversionFunc((*v1beta1.BastionStatus)(nil), (*Instance)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1beta1_BastionStatus_To_v1alpha6_Instance(a.(*v1beta1.BastionStatus), b.(*Instance), scope)
 	}); err != nil {
@@ -353,6 +338,11 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}
 	if err := s.AddConversionFunc((*v1beta1.Bastion)(nil), (*Bastion)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1beta1_Bastion_To_v1alpha6_Bastion(a.(*v1beta1.Bastion), b.(*Bastion), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddConversionFunc((*v1beta1.LoadBalancer)(nil), (*LoadBalancer)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_LoadBalancer_To_v1alpha6_LoadBalancer(a.(*v1beta1.LoadBalancer), b.(*LoadBalancer), scope)
 	}); err != nil {
 		return err
 	}
@@ -406,8 +396,18 @@ func RegisterConversions(s *runtime.Scheme) error {
 	}); err != nil {
 		return err
 	}
+	if err := s.AddConversionFunc((*v1beta1.OpenStackMachine)(nil), (*OpenStackMachine)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_OpenStackMachine_To_v1alpha6_OpenStackMachine(a.(*v1beta1.OpenStackMachine), b.(*OpenStackMachine), scope)
+	}); err != nil {
+		return err
+	}
 	if err := s.AddConversionFunc((*v1beta1.PortOpts)(nil), (*PortOpts)(nil), func(a, b interface{}, scope conversion.Scope) error {
 		return Convert_v1beta1_PortOpts_To_v1alpha6_PortOpts(a.(*v1beta1.PortOpts), b.(*PortOpts), scope)
+	}); err != nil {
+		return err
+	}
+	if err := s.AddConversionFunc((*v1beta1.RootVolume)(nil), (*RootVolume)(nil), func(a, b interface{}, scope conversion.Scope) error {
+		return Convert_v1beta1_RootVolume_To_v1alpha6_RootVolume(a.(*v1beta1.RootVolume), b.(*RootVolume), scope)
 	}); err != nil {
 		return err
 	}
@@ -461,11 +461,6 @@ func autoConvert_v1alpha6_APIServerLoadBalancer_To_v1beta1_APIServerLoadBalancer
 	return nil
 }
 
-// Convert_v1alpha6_APIServerLoadBalancer_To_v1beta1_APIServerLoadBalancer is an autogenerated conversion function.
-func Convert_v1alpha6_APIServerLoadBalancer_To_v1beta1_APIServerLoadBalancer(in *APIServerLoadBalancer, out *v1beta1.APIServerLoadBalancer, s conversion.Scope) error {
-	return autoConvert_v1alpha6_APIServerLoadBalancer_To_v1beta1_APIServerLoadBalancer(in, out, s)
-}
-
 func autoConvert_v1beta1_APIServerLoadBalancer_To_v1alpha6_APIServerLoadBalancer(in *v1beta1.APIServerLoadBalancer, out *APIServerLoadBalancer, s conversion.Scope) error {
 	if err := v1.Convert_Pointer_bool_To_bool(&in.Enabled, &out.Enabled, s); err != nil {
 		return err
@@ -475,12 +470,11 @@ func autoConvert_v1beta1_APIServerLoadBalancer_To_v1alpha6_APIServerLoadBalancer
 	if err := optional.Convert_optional_String_To_string(&in.Provider, &out.Provider, s); err != nil {
 		return err
 	}
+	// WARNING: in.Network requires manual conversion: does not exist in peer-type
+	// WARNING: in.Subnets requires manual conversion: does not exist in peer-type
+	// WARNING: in.AvailabilityZone requires manual conversion: does not exist in peer-type
+	// WARNING: in.Flavor requires manual conversion: does not exist in peer-type
 	return nil
-}
-
-// Convert_v1beta1_APIServerLoadBalancer_To_v1alpha6_APIServerLoadBalancer is an autogenerated conversion function.
-func Convert_v1beta1_APIServerLoadBalancer_To_v1alpha6_APIServerLoadBalancer(in *v1beta1.APIServerLoadBalancer, out *APIServerLoadBalancer, s conversion.Scope) error {
-	return autoConvert_v1beta1_APIServerLoadBalancer_To_v1alpha6_APIServerLoadBalancer(in, out, s)
 }
 
 func autoConvert_v1alpha6_AddressPair_To_v1beta1_AddressPair(in *AddressPair, out *v1beta1.AddressPair, s conversion.Scope) error {
@@ -510,7 +504,9 @@ func Convert_v1beta1_AddressPair_To_v1alpha6_AddressPair(in *v1beta1.AddressPair
 }
 
 func autoConvert_v1alpha6_Bastion_To_v1beta1_Bastion(in *Bastion, out *v1beta1.Bastion, s conversion.Scope) error {
-	out.Enabled = in.Enabled
+	if err := v1.Convert_bool_To_Pointer_bool(&in.Enabled, &out.Enabled, s); err != nil {
+		return err
+	}
 	// WARNING: in.Instance requires manual conversion: does not exist in peer-type
 	if err := optional.Convert_string_To_optional_String(&in.AvailabilityZone, &out.AvailabilityZone, s); err != nil {
 		return err
@@ -519,7 +515,9 @@ func autoConvert_v1alpha6_Bastion_To_v1beta1_Bastion(in *Bastion, out *v1beta1.B
 }
 
 func autoConvert_v1beta1_Bastion_To_v1alpha6_Bastion(in *v1beta1.Bastion, out *Bastion, s conversion.Scope) error {
-	out.Enabled = in.Enabled
+	if err := v1.Convert_Pointer_bool_To_bool(&in.Enabled, &out.Enabled, s); err != nil {
+		return err
+	}
 	// WARNING: in.Spec requires manual conversion: does not exist in peer-type
 	if err := optional.Convert_optional_String_To_string(&in.AvailabilityZone, &out.AvailabilityZone, s); err != nil {
 		return err
@@ -618,12 +616,8 @@ func autoConvert_v1beta1_LoadBalancer_To_v1alpha6_LoadBalancer(in *v1beta1.LoadB
 	out.InternalIP = in.InternalIP
 	out.AllowedCIDRs = *(*[]string)(unsafe.Pointer(&in.AllowedCIDRs))
 	out.Tags = *(*[]string)(unsafe.Pointer(&in.Tags))
+	// WARNING: in.LoadBalancerNetwork requires manual conversion: does not exist in peer-type
 	return nil
-}
-
-// Convert_v1beta1_LoadBalancer_To_v1alpha6_LoadBalancer is an autogenerated conversion function.
-func Convert_v1beta1_LoadBalancer_To_v1alpha6_LoadBalancer(in *v1beta1.LoadBalancer, out *LoadBalancer, s conversion.Scope) error {
-	return autoConvert_v1beta1_LoadBalancer_To_v1alpha6_LoadBalancer(in, out, s)
 }
 
 func autoConvert_v1alpha6_NetworkFilter_To_v1beta1_NetworkFilter(in *NetworkFilter, out *v1beta1.NetworkFilter, s conversion.Scope) error {
@@ -1109,11 +1103,6 @@ func autoConvert_v1alpha6_OpenStackMachine_To_v1beta1_OpenStackMachine(in *OpenS
 	return nil
 }
 
-// Convert_v1alpha6_OpenStackMachine_To_v1beta1_OpenStackMachine is an autogenerated conversion function.
-func Convert_v1alpha6_OpenStackMachine_To_v1beta1_OpenStackMachine(in *OpenStackMachine, out *v1beta1.OpenStackMachine, s conversion.Scope) error {
-	return autoConvert_v1alpha6_OpenStackMachine_To_v1beta1_OpenStackMachine(in, out, s)
-}
-
 func autoConvert_v1beta1_OpenStackMachine_To_v1alpha6_OpenStackMachine(in *v1beta1.OpenStackMachine, out *OpenStackMachine, s conversion.Scope) error {
 	out.ObjectMeta = in.ObjectMeta
 	if err := Convert_v1beta1_OpenStackMachineSpec_To_v1alpha6_OpenStackMachineSpec(&in.Spec, &out.Spec, s); err != nil {
@@ -1123,11 +1112,6 @@ func autoConvert_v1beta1_OpenStackMachine_To_v1alpha6_OpenStackMachine(in *v1bet
 		return err
 	}
 	return nil
-}
-
-// Convert_v1beta1_OpenStackMachine_To_v1alpha6_OpenStackMachine is an autogenerated conversion function.
-func Convert_v1beta1_OpenStackMachine_To_v1alpha6_OpenStackMachine(in *v1beta1.OpenStackMachine, out *OpenStackMachine, s conversion.Scope) error {
-	return autoConvert_v1beta1_OpenStackMachine_To_v1alpha6_OpenStackMachine(in, out, s)
 }
 
 func autoConvert_v1alpha6_OpenStackMachineList_To_v1beta1_OpenStackMachineList(in *OpenStackMachineList, out *v1beta1.OpenStackMachineList, s conversion.Scope) error {
@@ -1174,7 +1158,7 @@ func Convert_v1beta1_OpenStackMachineList_To_v1alpha6_OpenStackMachineList(in *v
 
 func autoConvert_v1alpha6_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(in *OpenStackMachineSpec, out *v1beta1.OpenStackMachineSpec, s conversion.Scope) error {
 	out.ProviderID = (*string)(unsafe.Pointer(in.ProviderID))
-	out.InstanceID = (*string)(unsafe.Pointer(in.InstanceID))
+	// WARNING: in.InstanceID requires manual conversion: does not exist in peer-type
 	// WARNING: in.CloudName requires manual conversion: does not exist in peer-type
 	out.Flavor = in.Flavor
 	// WARNING: in.Image requires manual conversion: inconvertible types (string vs sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1.ImageParam)
@@ -1209,7 +1193,15 @@ func autoConvert_v1alpha6_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(i
 	out.Tags = *(*[]string)(unsafe.Pointer(&in.Tags))
 	// WARNING: in.ServerMetadata requires manual conversion: inconvertible types (map[string]string vs []sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1.ServerMetadata)
 	out.ConfigDrive = (*bool)(unsafe.Pointer(in.ConfigDrive))
-	out.RootVolume = (*v1beta1.RootVolume)(unsafe.Pointer(in.RootVolume))
+	if in.RootVolume != nil {
+		in, out := &in.RootVolume, &out.RootVolume
+		*out = new(v1beta1.RootVolume)
+		if err := Convert_v1alpha6_RootVolume_To_v1beta1_RootVolume(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.RootVolume = nil
+	}
 	// WARNING: in.ServerGroupID requires manual conversion: does not exist in peer-type
 	if in.IdentityRef != nil {
 		in, out := &in.IdentityRef, &out.IdentityRef
@@ -1225,7 +1217,6 @@ func autoConvert_v1alpha6_OpenStackMachineSpec_To_v1beta1_OpenStackMachineSpec(i
 
 func autoConvert_v1beta1_OpenStackMachineSpec_To_v1alpha6_OpenStackMachineSpec(in *v1beta1.OpenStackMachineSpec, out *OpenStackMachineSpec, s conversion.Scope) error {
 	out.ProviderID = (*string)(unsafe.Pointer(in.ProviderID))
-	out.InstanceID = (*string)(unsafe.Pointer(in.InstanceID))
 	out.Flavor = in.Flavor
 	// WARNING: in.Image requires manual conversion: inconvertible types (sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1.ImageParam vs string)
 	out.SSHKeyName = in.SSHKeyName
@@ -1255,7 +1246,15 @@ func autoConvert_v1beta1_OpenStackMachineSpec_To_v1alpha6_OpenStackMachineSpec(i
 	out.Tags = *(*[]string)(unsafe.Pointer(&in.Tags))
 	// WARNING: in.ServerMetadata requires manual conversion: inconvertible types ([]sigs.k8s.io/cluster-api-provider-openstack/api/v1beta1.ServerMetadata vs map[string]string)
 	out.ConfigDrive = (*bool)(unsafe.Pointer(in.ConfigDrive))
-	out.RootVolume = (*RootVolume)(unsafe.Pointer(in.RootVolume))
+	if in.RootVolume != nil {
+		in, out := &in.RootVolume, &out.RootVolume
+		*out = new(RootVolume)
+		if err := Convert_v1beta1_RootVolume_To_v1alpha6_RootVolume(*in, *out, s); err != nil {
+			return err
+		}
+	} else {
+		out.RootVolume = nil
+	}
 	// WARNING: in.AdditionalBlockDevices requires manual conversion: does not exist in peer-type
 	// WARNING: in.ServerGroup requires manual conversion: does not exist in peer-type
 	if in.IdentityRef != nil {
@@ -1288,6 +1287,7 @@ func Convert_v1alpha6_OpenStackMachineStatus_To_v1beta1_OpenStackMachineStatus(i
 
 func autoConvert_v1beta1_OpenStackMachineStatus_To_v1alpha6_OpenStackMachineStatus(in *v1beta1.OpenStackMachineStatus, out *OpenStackMachineStatus, s conversion.Scope) error {
 	out.Ready = in.Ready
+	// WARNING: in.InstanceID requires manual conversion: does not exist in peer-type
 	out.Addresses = *(*[]corev1.NodeAddress)(unsafe.Pointer(&in.Addresses))
 	out.InstanceState = (*InstanceState)(unsafe.Pointer(in.InstanceState))
 	// WARNING: in.Resolved requires manual conversion: does not exist in peer-type
@@ -1503,27 +1503,16 @@ func autoConvert_v1beta1_PortOpts_To_v1alpha6_PortOpts(in *v1beta1.PortOpts, out
 }
 
 func autoConvert_v1alpha6_RootVolume_To_v1beta1_RootVolume(in *RootVolume, out *v1beta1.RootVolume, s conversion.Scope) error {
-	out.Size = in.Size
-	out.VolumeType = in.VolumeType
-	out.AvailabilityZone = in.AvailabilityZone
+	// WARNING: in.Size requires manual conversion: does not exist in peer-type
+	// WARNING: in.VolumeType requires manual conversion: does not exist in peer-type
+	// WARNING: in.AvailabilityZone requires manual conversion: does not exist in peer-type
 	return nil
-}
-
-// Convert_v1alpha6_RootVolume_To_v1beta1_RootVolume is an autogenerated conversion function.
-func Convert_v1alpha6_RootVolume_To_v1beta1_RootVolume(in *RootVolume, out *v1beta1.RootVolume, s conversion.Scope) error {
-	return autoConvert_v1alpha6_RootVolume_To_v1beta1_RootVolume(in, out, s)
 }
 
 func autoConvert_v1beta1_RootVolume_To_v1alpha6_RootVolume(in *v1beta1.RootVolume, out *RootVolume, s conversion.Scope) error {
-	out.Size = in.Size
-	out.VolumeType = in.VolumeType
-	out.AvailabilityZone = in.AvailabilityZone
+	// WARNING: in.SizeGiB requires manual conversion: does not exist in peer-type
+	// WARNING: in.BlockDeviceVolume requires manual conversion: does not exist in peer-type
 	return nil
-}
-
-// Convert_v1beta1_RootVolume_To_v1alpha6_RootVolume is an autogenerated conversion function.
-func Convert_v1beta1_RootVolume_To_v1alpha6_RootVolume(in *v1beta1.RootVolume, out *RootVolume, s conversion.Scope) error {
-	return autoConvert_v1beta1_RootVolume_To_v1alpha6_RootVolume(in, out, s)
 }
 
 func autoConvert_v1alpha6_Router_To_v1beta1_Router(in *Router, out *v1beta1.Router, s conversion.Scope) error {

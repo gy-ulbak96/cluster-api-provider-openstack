@@ -22,16 +22,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/golang/mock/gomock"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo/v2" //nolint:revive
+	. "github.com/onsi/gomega"    //nolint:revive
+	"go.uber.org/mock/gomock"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/test/framework"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -149,8 +149,8 @@ var _ = Describe("When calling getOrCreate", func() {
 		openStackCluster := &infrav1.OpenStackCluster{}
 		machine := &clusterv1.Machine{}
 		openStackMachine := &infrav1.OpenStackMachine{
-			Spec: infrav1.OpenStackMachineSpec{
-				InstanceID: pointer.String("machine-uuid"),
+			Status: infrav1.OpenStackMachineStatus{
+				InstanceID: ptr.To("machine-uuid"),
 			},
 		}
 
